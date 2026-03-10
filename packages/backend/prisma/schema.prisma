@@ -1,0 +1,393 @@
+// 轻量级ERP系统数据库模型 - SQLite兼容版
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 会计科目
+model AccountingSubject {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  type             String   // ASSET, LIABILITY, EQUITY, COST, REVENUE, EXPENSE
+  balanceDirection String   @default("DEBIT") // DEBIT, CREDIT
+  voucherItems     VoucherItem[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("accounting_subjects")
+}
+
+// 客户
+model Customer {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  name              String
+  contactPerson     String?
+  phone             String?
+  email             String?
+  address           String?
+  creditLimit       Float    @default(0)
+  receivableBalance Float    @default(0)
+  salesOrders       SalesOrder[]
+  receipts          Receipt[]
+  salesInvoices     SalesInvoice[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("customers")
+}
+
+// 供应商
+model Supplier {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  contactPerson   String?
+  phone           String?
+  email           String?
+  address         String?
+  payableBalance  Float    @default(0)
+  purchaseOrders  PurchaseOrder[]
+  purchaseInvoices PurchaseInvoice[]
+  payments        Payment[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("suppliers")
+}
+
+// 物料
+model Material {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  specification String?
+  unit         String
+  currentStock Float    @default(0)
+  costPrice    Float    @default(0)
+  salePrice    Float    @default(0)
+  salesOrderItems SalesOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  purchaseReceiptItems PurchaseReceiptItem[]
+  inventoryTransactions InventoryTransaction[]
+  deliveryItems         DeliveryItem[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("materials")
+}
+
+// 销售订单
+model SalesOrder {
+  id           String   @id @default(cuid())
+  orderNo      String   @unique
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+  orderDate    DateTime @default(now())
+  deliveryDate DateTime?
+  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  totalAmount  Float    @default(0)
+  taxAmount    Float    @default(0)
+  createdBy    String?
+  items        SalesOrderItem[]
+  deliveries   Delivery[]
+  salesInvoices SalesInvoice[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([orderDate])
+  @@map("sales_orders")
+}
+
+// 销售订单明细
+model SalesOrderItem {
+  id               String   @id @default(cuid())
+  orderId          String
+  order            SalesOrder @relation(fields: [orderId], references: [id])
+  materialId       String
+  material         Material  @relation(fields: [materialId], references: [id])
+  quantity         Float
+  unitPrice        Float
+  amount           Float
+  deliveredQuantity Float    @default(0)
+  deliveryItems    DeliveryItem[]
+
+  @@index([orderId])
+  @@index([materialId])
+  @@map("sales_order_items")
+}
+
+// 发货单
+model Delivery {
+  id           String   @id @default(cuid())
+  deliveryNo   String   @unique
+  orderId      String
+  order        SalesOrder @relation(fields: [orderId], references: [id])
+  deliveryDate DateTime @default(now())
+  warehouseId  String?
+  shippingInfo String?
+  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  items        DeliveryItem[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([deliveryDate])
+  @@map("deliveries")
+}
+
+// 发货明细
+model DeliveryItem {
+  id          String   @id @default(cuid())
+  deliveryId  String
+  delivery    Delivery @relation(fields: [deliveryId], references: [id])
+  orderItemId String
+  orderItem   SalesOrderItem @relation(fields: [orderItemId], references: [id])
+  materialId  String
+  material    Material @relation(fields: [materialId], references: [id])
+  quantity    Float
+
+  @@index([deliveryId])
+  @@index([orderItemId])
+  @@index([materialId])
+  @@map("delivery_items")
+}
+
+// 采购订单
+model PurchaseOrder {
+  id           String   @id @default(cuid())
+  orderNo      String   @unique
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  orderDate    DateTime @default(now())
+  expectedDate DateTime?
+  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  totalAmount  Float    @default(0)
+  createdBy    String?
+  items        PurchaseOrderItem[]
+  purchaseReceipts PurchaseReceipt[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([orderDate])
+  @@map("purchase_orders")
+}
+
+// 采购订单明细
+model PurchaseOrderItem {
+  id               String   @id @default(cuid())
+  orderId          String
+  order            PurchaseOrder @relation(fields: [orderId], references: [id])
+  materialId       String
+  material         Material      @relation(fields: [materialId], references: [id])
+  quantity         Float
+  unitPrice        Float
+  amount           Float
+  receivedQuantity Float     @default(0)
+  purchaseReceiptItems PurchaseReceiptItem[]
+
+  @@index([orderId])
+  @@index([materialId])
+  @@map("purchase_order_items")
+}
+
+// 财务凭证
+model Voucher {
+  id          String   @id @default(cuid())
+  voucherNo   String   @unique
+  voucherDate DateTime @default(now())
+  voucherType String   // GENERAL, ADJUSTMENT, REVERSAL
+  summary     String
+  status      String   @default("DRAFT") // DRAFT, POSTED, REVERSED
+  createdBy   String?
+  items       VoucherItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([voucherDate])
+  @@map("vouchers")
+}
+
+// 凭证分录
+model VoucherItem {
+  id          String   @id @default(cuid())
+  voucherId   String
+  voucher     Voucher  @relation(fields: [voucherId], references: [id])
+  subjectId   String
+  subject     AccountingSubject @relation(fields: [subjectId], references: [id])
+  debitAmount Float    @default(0)
+  creditAmount Float   @default(0)
+  description String?
+
+  @@index([voucherId])
+  @@index([subjectId])
+  @@map("voucher_items")
+}
+
+// 库存交易
+model InventoryTransaction {
+  id              String   @id @default(cuid())
+  materialId      String
+  material        Material @relation(fields: [materialId], references: [id])
+  transactionType String   // PURCHASE_RECEIPT, SALES_DELIVERY, STOCK_ADJUSTMENT
+  quantity        Float
+  unitCost        Float
+  referenceType   String   // SALES_ORDER, PURCHASE_ORDER, etc.
+  referenceId     String
+  transactionDate DateTime @default(now())
+
+  @@index([materialId])
+  @@index([referenceType, referenceId])
+  @@map("inventory_transactions")
+}
+
+// 采购发票
+model PurchaseInvoice {
+  id          String   @id @default(cuid())
+  invoiceNo   String   @unique
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  receiptId   String?
+  receipt     PurchaseReceipt? @relation(fields: [receiptId], references: [id])
+  invoiceDate DateTime @default(now())
+  amount      Float    @default(0)
+  taxAmount   Float    @default(0)
+  status      String   @default("DRAFT") // DRAFT, ISSUED, PAID, CANCELLED
+  payments    Payment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([receiptId])
+  @@map("purchase_invoices")
+}
+
+// 销售发票
+model SalesInvoice {
+  id          String   @id @default(cuid())
+  invoiceNo   String   @unique
+  orderId     String
+  order       SalesOrder @relation(fields: [orderId], references: [id])
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  invoiceDate DateTime @default(now())
+  amount      Float    @default(0)
+  taxAmount   Float    @default(0)
+  status      String   @default("DRAFT") // DRAFT, ISSUED, PAID, CANCELLED
+  receipts    Receipt[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([customerId])
+  @@map("sales_invoices")
+}
+
+// 付款单
+model Payment {
+  id            String   @id @default(cuid())
+  paymentNo     String   @unique
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  invoiceId     String?
+  invoice       PurchaseInvoice? @relation(fields: [invoiceId], references: [id])
+  paymentDate   DateTime @default(now())
+  amount        Float    @default(0)
+  paymentMethod String   // CASH, BANK_TRANSFER, CHECK, CREDIT_CARD
+  status        String   @default("PENDING") // PENDING, PAID, CANCELLED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+// 收款单
+model Receipt {
+  id            String   @id @default(cuid())
+  receiptNo     String   @unique
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  invoiceId     String?
+  invoice       SalesInvoice? @relation(fields: [invoiceId], references: [id])
+  receiptDate   DateTime @default(now())
+  amount        Float    @default(0)
+  paymentMethod String   // CASH, BANK_TRANSFER, CHECK, CREDIT_CARD
+  status        String   @default("PENDING") // PENDING, PAID, CANCELLED
+  createdAt     DateTime @default(now())
+
+  @@index([customerId])
+  @@index([invoiceId])
+  @@map("receipts")
+}
+
+// 系统配置
+model SystemConfig {
+  id          String   @id @default(cuid())
+  configKey   String   @unique
+  configValue String
+  description String?
+
+  @@map("system_configs")
+}
+
+// 采购收货单
+model PurchaseReceipt {
+  id           String   @id @default(cuid())
+  receiptNo    String   @unique
+  orderId      String
+  order        PurchaseOrder @relation(fields: [orderId], references: [id])
+  receiptDate  DateTime @default(now())
+  warehouseId  String?
+  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  items        PurchaseReceiptItem[]
+  purchaseInvoices PurchaseInvoice[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([receiptDate])
+  @@map("purchase_receipts")
+}
+
+// 采购收货明细
+model PurchaseReceiptItem {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receipt      PurchaseReceipt @relation(fields: [receiptId], references: [id])
+  orderItemId  String
+  orderItem    PurchaseOrderItem @relation(fields: [orderItemId], references: [id])
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantity     Float
+  unitPrice    Float    @default(0)
+
+  @@index([receiptId])
+  @@index([orderItemId])
+  @@index([materialId])
+  @@map("purchase_receipt_items")
+}
+
+// 用户
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  name      String
+  email     String?
+  phone     String?
+  role      String   @default("USER") // ADMIN, USER
+  status    String   @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}

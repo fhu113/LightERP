@@ -1,0 +1,545 @@
+// 轻量级ERP系统数据库模型
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 会计科目
+model AccountingSubject {
+  id               String               @id @default(cuid())
+  code             String               @unique(map: "AccountingSubject_code_key")
+  name             String
+  type             SubjectType
+  balanceDirection BalanceDirection
+  parentId         String?
+  parent           AccountingSubject?   @relation("SubjectParent", fields: [parentId], references: [id])
+  children         AccountingSubject[]  @relation("SubjectParent")
+  voucherItems     VoucherItem[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([parentId])
+  @@map("accounting_subjects")
+}
+
+// 客户
+model Customer {
+  id                String         @id @default(cuid())
+  code              String         @unique(map: "Customer_code_key")
+  name              String
+  contactPerson     String?
+  phone             String?
+  email             String?
+  address           String?
+  creditLimit       Float          @default(0)
+  receivableBalance Float          @default(0)
+  salesOrders       SalesOrder[]
+  receipts          Receipt[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@map("customers")
+}
+
+// 供应商
+model Supplier {
+  id              String           @id @default(cuid())
+  code            String           @unique(map: "Supplier_code_key")
+  name            String
+  contactPerson   String?
+  phone           String?
+  email           String?
+  address         String?
+  payableBalance  Float            @default(0)
+  purchaseOrders  PurchaseOrder[]
+  payments        Payment[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@map("suppliers")
+}
+
+// 物料分类
+model MaterialCategory {
+  id       String    @id @default(cuid())
+  code     String    @unique(map: "MaterialCategory_code_key")
+  name     String
+  parentId String?
+  parent   MaterialCategory? @relation("CategoryParent", fields: [parentId], references: [id])
+  children MaterialCategory[] @relation("CategoryParent")
+  materials Material[]
+
+  @@index([parentId])
+  @@map("material_categories")
+}
+
+// 物料
+model Material {
+  id           String                 @id @default(cuid())
+  code         String                 @unique(map: "Material_code_key")
+  name         String
+  specification String?
+  unit         String
+  categoryId   String?
+  category     MaterialCategory?      @relation(fields: [categoryId], references: [id])
+  currentStock Float                  @default(0)
+  costPrice    Float                  @default(0)
+  salePrice    Float                  @default(0)
+  minStock     Float                  @default(0)
+  maxStock     Float                  @default(0)
+  salesOrderItems SalesOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  deliveryItems DeliveryItem[]
+  purchaseReceiptItems PurchaseReceiptItem[]
+  inventoryTransactions InventoryTransaction[]
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@index([categoryId])
+  @@map("materials")
+}
+
+// 仓库
+model Warehouse {
+  id       String    @id @default(cuid())
+  code     String    @unique(map: "Warehouse_code_key")
+  name     String
+  location String?
+  manager  String?
+  deliveries Delivery[]
+  purchaseReceipts PurchaseReceipt[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("warehouses")
+}
+
+// 销售订单
+model SalesOrder {
+  id           String           @id @default(cuid())
+  orderNo      String           @unique(map: "SalesOrder_orderNo_key")
+  customerId   String
+  customer     Customer         @relation(fields: [customerId], references: [id])
+  orderDate    DateTime         @default(now())
+  deliveryDate DateTime?
+  status       OrderStatus      @default(DRAFT)
+  totalAmount  Float            @default(0)
+  taxAmount    Float            @default(0)
+  createdBy    String?          // 预留用户ID字段
+  items        SalesOrderItem[]
+  deliveries   Delivery[]
+  invoices     SalesInvoice[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([customerId])
+  @@index([orderDate])
+  @@map("sales_orders")
+}
+
+// 销售订单明细
+model SalesOrderItem {
+  id               String    @id @default(cuid())
+  orderId          String
+  order            SalesOrder @relation(fields: [orderId], references: [id])
+  materialId       String
+  material         Material  @relation(fields: [materialId], references: [id])
+  quantity         Float
+  unitPrice        Float
+  amount           Float
+  deliveredQuantity Float    @default(0)
+  deliveryItems    DeliveryItem[]
+
+  @@index([orderId])
+  @@index([materialId])
+  @@map("sales_order_items")
+}
+
+// 发货单
+model Delivery {
+  id           String         @id @default(cuid())
+  deliveryNo   String         @unique(map: "Delivery_deliveryNo_key")
+  orderId      String
+  order        SalesOrder     @relation(fields: [orderId], references: [id])
+  deliveryDate DateTime       @default(now())
+  warehouseId  String
+  warehouse    Warehouse      @relation(fields: [warehouseId], references: [id])
+  shippingInfo String?
+  status       DeliveryStatus @default(DRAFT)
+  items        DeliveryItem[]
+  createdAt    DateTime       @default(now())
+
+  @@index([orderId])
+  @@index([warehouseId])
+  @@map("deliveries")
+}
+
+// 发货明细
+model DeliveryItem {
+  id            String         @id @default(cuid())
+  deliveryId    String
+  delivery      Delivery       @relation(fields: [deliveryId], references: [id])
+  orderItemId   String
+  orderItem     SalesOrderItem @relation(fields: [orderItemId], references: [id])
+  materialId    String
+  material      Material       @relation(fields: [materialId], references: [id])
+  quantity      Float
+
+  @@index([deliveryId])
+  @@index([orderItemId])
+  @@index([materialId])
+  @@map("delivery_items")
+}
+
+// 销售发票
+model SalesInvoice {
+  id          String         @id @default(cuid())
+  invoiceNo   String         @unique(map: "SalesInvoice_invoiceNo_key")
+  orderId     String
+  order       SalesOrder     @relation(fields: [orderId], references: [id])
+  invoiceDate DateTime       @default(now())
+  amount      Float          @default(0)
+  taxAmount   Float          @default(0)
+  status      InvoiceStatus  @default(DRAFT)
+  receipts    Receipt[]
+  createdAt   DateTime       @default(now())
+
+  @@index([orderId])
+  @@map("sales_invoices")
+}
+
+// 收款单
+model Receipt {
+  id            String         @id @default(cuid())
+  receiptNo     String         @unique(map: "Receipt_receiptNo_key")
+  customerId    String
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  invoiceId     String?
+  invoice       SalesInvoice?  @relation(fields: [invoiceId], references: [id])
+  receiptDate   DateTime       @default(now())
+  amount        Float          @default(0)
+  paymentMethod PaymentMethod
+  status        PaymentStatus  @default(PENDING)
+  createdAt     DateTime       @default(now())
+
+  @@index([customerId])
+  @@index([invoiceId])
+  @@map("receipts")
+}
+
+// 采购订单
+model PurchaseOrder {
+  id           String           @id @default(cuid())
+  orderNo      String           @unique(map: "PurchaseOrder_orderNo_key")
+  supplierId   String
+  supplier     Supplier         @relation(fields: [supplierId], references: [id])
+  orderDate    DateTime         @default(now())
+  expectedDate DateTime?
+  status       OrderStatus      @default(DRAFT)
+  totalAmount  Float            @default(0)
+  createdBy    String?          // 预留用户ID字段
+  items        PurchaseOrderItem[]
+  receipts     PurchaseReceipt[]
+  invoices     PurchaseInvoice[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([supplierId])
+  @@index([orderDate])
+  @@map("purchase_orders")
+}
+
+// 采购订单明细
+model PurchaseOrderItem {
+  id               String    @id @default(cuid())
+  orderId          String
+  order            PurchaseOrder @relation(fields: [orderId], references: [id])
+  materialId       String
+  material         Material      @relation(fields: [materialId], references: [id])
+  quantity         Float
+  unitPrice        Float
+  amount           Float
+  receivedQuantity Float     @default(0)
+  receiptItems     PurchaseReceiptItem[]
+
+  @@index([orderId])
+  @@index([materialId])
+  @@map("purchase_order_items")
+}
+
+// 采购收货单
+model PurchaseReceipt {
+  id           String         @id @default(cuid())
+  receiptNo    String         @unique(map: "PurchaseReceipt_receiptNo_key")
+  orderId      String
+  order        PurchaseOrder  @relation(fields: [orderId], references: [id])
+  receiptDate  DateTime       @default(now())
+  warehouseId  String
+  warehouse    Warehouse      @relation(fields: [warehouseId], references: [id])
+  status       ReceiptStatus  @default(DRAFT)
+  items        PurchaseReceiptItem[]
+  invoices     PurchaseInvoice[]
+  createdAt    DateTime       @default(now())
+
+  @@index([orderId])
+  @@index([warehouseId])
+  @@map("purchase_receipts")
+}
+
+// 采购收货明细
+model PurchaseReceiptItem {
+  id            String         @id @default(cuid())
+  receiptId     String
+  receipt       PurchaseReceipt @relation(fields: [receiptId], references: [id])
+  orderItemId   String
+  orderItem     PurchaseOrderItem @relation(fields: [orderItemId], references: [id])
+  materialId    String
+  material      Material       @relation(fields: [materialId], references: [id])
+  quantity      Float
+
+  @@index([receiptId])
+  @@index([orderItemId])
+  @@index([materialId])
+  @@map("purchase_receipt_items")
+}
+
+// 采购发票
+model PurchaseInvoice {
+  id          String         @id @default(cuid())
+  invoiceNo   String         @unique(map: "PurchaseInvoice_invoiceNo_key")
+  supplierId  String
+  supplier    Supplier       @relation(fields: [supplierId], references: [id])
+  receiptId   String?
+  receipt     PurchaseReceipt? @relation(fields: [receiptId], references: [id])
+  invoiceDate DateTime       @default(now())
+  amount      Float          @default(0)
+  taxAmount   Float          @default(0)
+  status      InvoiceStatus  @default(DRAFT)
+  payments    Payment[]
+  createdAt   DateTime       @default(now())
+
+  @@index([supplierId])
+  @@index([receiptId])
+  @@map("purchase_invoices")
+}
+
+// 付款单
+model Payment {
+  id            String         @id @default(cuid())
+  paymentNo     String         @unique(map: "Payment_paymentNo_key")
+  supplierId    String
+  supplier      Supplier       @relation(fields: [supplierId], references: [id])
+  invoiceId     String?
+  invoice       PurchaseInvoice? @relation(fields: [invoiceId], references: [id])
+  paymentDate   DateTime       @default(now())
+  amount        Float          @default(0)
+  paymentMethod PaymentMethod
+  status        PaymentStatus  @default(PENDING)
+  createdAt     DateTime       @default(now())
+
+  @@index([supplierId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+// 会计期间
+model AccountingPeriod {
+  id        String     @id @default(cuid())
+  year      Int
+  month     Int
+  startDate DateTime
+  endDate   DateTime
+  status    PeriodStatus @default(OPEN)
+  vouchers  Voucher[]
+
+  @@unique([year, month])
+  @@map("accounting_periods")
+}
+
+// 财务凭证
+model Voucher {
+  id          String        @id @default(cuid())
+  voucherNo   String        @unique(map: "Voucher_voucherNo_key")
+  voucherDate DateTime      @default(now())
+  voucherType VoucherType
+  summary     String
+  periodId    String
+  period      AccountingPeriod @relation(fields: [periodId], references: [id])
+  status      VoucherStatus @default(DRAFT)
+  createdBy   String?       // 预留用户ID字段
+  items       VoucherItem[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([periodId])
+  @@index([voucherDate])
+  @@map("vouchers")
+}
+
+// 凭证分录
+model VoucherItem {
+  id          String           @id @default(cuid())
+  voucherId   String
+  voucher     Voucher          @relation(fields: [voucherId], references: [id])
+  subjectId   String
+  subject     AccountingSubject @relation(fields: [subjectId], references: [id])
+  debitAmount Float            @default(0)
+  creditAmount Float           @default(0)
+  description String?
+
+  @@index([voucherId])
+  @@index([subjectId])
+  @@map("voucher_items")
+}
+
+// 库存交易
+model InventoryTransaction {
+  id              String               @id @default(cuid())
+  materialId      String
+  material        Material             @relation(fields: [materialId], references: [id])
+  warehouseId     String
+  warehouse       Warehouse            @relation(fields: [warehouseId], references: [id])
+  transactionType InventoryTransactionType
+  quantity        Float
+  unitCost        Float
+  referenceType   ReferenceType
+  referenceId     String
+  transactionDate DateTime             @default(now())
+
+  @@index([materialId])
+  @@index([warehouseId])
+  @@index([referenceType, referenceId])
+  @@map("inventory_transactions")
+}
+
+// 系统配置
+model SystemConfig {
+  id          String   @id @default(cuid())
+  configKey   String   @unique(map: "SystemConfig_configKey_key")
+  configValue String
+  description String?
+
+  @@map("system_configs")
+}
+
+// 审计日志
+model AuditLog {
+  id         String   @id @default(cuid())
+  tableName  String
+  recordId   String
+  action     AuditAction
+  oldValue   String?
+  newValue   String?
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@index([tableName, recordId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ========== 枚举类型定义 ==========
+
+enum SubjectType {
+  ASSET      // 资产
+  LIABILITY  // 负债
+  EQUITY     // 所有者权益
+  COST       // 成本
+  REVENUE    // 收入
+  EXPENSE    // 费用
+}
+
+enum BalanceDirection {
+  DEBIT   // 借方
+  CREDIT  // 贷方
+}
+
+enum OrderStatus {
+  DRAFT      // 草稿
+  CONFIRMED  // 已确认
+  COMPLETED  // 已完成
+  CANCELLED  // 已取消
+}
+
+enum DeliveryStatus {
+  DRAFT      // 草稿
+  CONFIRMED  // 已确认
+  SHIPPED    // 已发货
+  COMPLETED  // 已完成
+  CANCELLED  // 已取消
+}
+
+enum InvoiceStatus {
+  DRAFT      // 草稿
+  ISSUED     // 已开票
+  PAID       // 已付款
+  CANCELLED  // 已取消
+}
+
+enum PaymentMethod {
+  CASH       // 现金
+  BANK_TRANSFER // 银行转账
+  CHECK      // 支票
+  CREDIT_CARD // 信用卡
+}
+
+enum PaymentStatus {
+  PENDING    // 待支付
+  PAID       // 已支付
+  CANCELLED  // 已取消
+}
+
+enum ReceiptStatus {
+  DRAFT      // 草稿
+  RECEIVED   // 已收货
+  INSPECTED  // 已检验
+  COMPLETED  // 已完成
+  CANCELLED  // 已取消
+}
+
+enum PeriodStatus {
+  OPEN       // 打开
+  CLOSED     // 关闭
+  LOCKED     // 锁定
+}
+
+enum VoucherType {
+  GENERAL    // 普通凭证
+  ADJUSTMENT // 调整凭证
+  REVERSAL   // 冲销凭证
+}
+
+enum VoucherStatus {
+  DRAFT      // 草稿
+  POSTED     // 已过账
+  REVERSED   // 已冲销
+}
+
+enum InventoryTransactionType {
+  PURCHASE_RECEIPT  // 采购入库
+  SALES_DELIVERY    // 销售出库
+  STOCK_ADJUSTMENT  // 库存调整
+  STOCK_TRANSFER    // 库存转移
+}
+
+enum ReferenceType {
+  SALES_ORDER
+  PURCHASE_ORDER
+  DELIVERY
+  PURCHASE_RECEIPT
+  SALES_INVOICE
+  PURCHASE_INVOICE
+  RECEIPT
+  PAYMENT
+  VOUCHER
+  STOCK_ADJUSTMENT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
