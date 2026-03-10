@@ -1,4 +1,4 @@
-# LightERP - 轻量级ERP系统
+# LightERP - 会发光的ERP系统
 
 一个基于Node.js + React + PostgreSQL/SQLite的轻量级企业资源计划系统，包含主数据管理、OTC流程、PTP流程和财务管理。
 
