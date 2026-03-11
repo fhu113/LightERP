@@ -4,13 +4,15 @@ WORKDIR /app
 
 COPY . .
 
-ENV NODE_ENV=development
-RUN npm install --include=dev
-RUN npx prisma generate --schema=packages/backend/prisma/schema.prisma
-RUN npm run build -w packages/backend
+# Install all dependencies (including devDependencies for Prisma)
+RUN npm install
 
-ENV NODE_ENV=production
+# Generate Prisma client
+RUN npx prisma generate --schema=packages/backend/prisma/schema.prisma
+
+# Build the backend
+RUN npm run build -w packages/backend
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start", "-w", "packages/backend"]
+CMD ["node", "packages/backend/dist/server.js"]
