@@ -81,7 +81,7 @@ export class ReceiptService {
     }
 
     // 如果有发票ID，检查发票是否存在且有效
-    let invoice = null;
+    let invoice: any = null;
     if (data.invoiceId) {
       invoice = await prisma.salesInvoice.findUnique({
         where: { id: data.invoiceId }

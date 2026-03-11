@@ -91,7 +91,7 @@ export class SalesService {
 
     // 检查物料是否存在并计算总金额
     let totalAmount = 0;
-    const itemsData = [];
+    const itemsData: any[] = [];
 
     for (const item of data.items) {
       const material = await prisma.material.findUnique({

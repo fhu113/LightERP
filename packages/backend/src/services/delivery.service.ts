@@ -121,7 +121,7 @@ export class DeliveryService {
     const deliveryNo = await this.generateDeliveryNo();
 
     // 检查发货数量不超过订单可发货数量
-    const itemsData = [];
+    const itemsData: any[] = [];
     for (const item of data.items) {
       const orderItem = await prisma.salesOrderItem.findUnique({
         where: { id: item.orderItemId },
