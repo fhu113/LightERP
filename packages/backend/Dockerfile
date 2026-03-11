@@ -2,9 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files from packages/backend
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY src ./src/
+COPY tsconfig.json ./
 
 # Install dependencies
 RUN npm install
@@ -12,9 +14,7 @@ RUN npm install
 # Generate Prisma client
 RUN npx prisma generate --schema=prisma/schema.postgresql.prisma
 
-# Copy source code and build
-COPY src ./src/
-COPY tsconfig.json ./
+# Build the project
 RUN npm run build
 
 # Expose port
