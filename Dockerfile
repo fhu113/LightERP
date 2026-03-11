@@ -4,9 +4,12 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm install
+ENV NODE_ENV=development
+RUN npm install --include=dev
 RUN npx prisma generate --schema=packages/backend/prisma/schema.prisma
 RUN npm run build -w packages/backend
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
