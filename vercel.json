@@ -1,8 +1,23 @@
 {
-  "buildCommand": "npm run build -w packages/backend && npm run build -w packages/frontend",
-  "outputDirectory": "packages/frontend/dist",
-  "installCommand": "npm install",
+  "version": 2,
+  "builds": [
+    {
+      "src": "packages/backend",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "packages/frontend",
+      "use": "@vercel/static"
+    }
+  ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/packages/backend/dist/server.js" }
+    {
+      "src": "/api/(.*)",
+      "dest": "packages/backend"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "packages/frontend/dist/$1"
+    }
   ]
 }
