@@ -141,30 +141,4 @@ if (require.main === module) {
   startServer();
 }
 
-// Vercel Serverless 导出
-import { VercelRequest, VercelResponse } from '@vercel/node';
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Vercel 环境下的特殊处理
-  if (process.env.VERCEL === '1') {
-    try {
-      await prisma.$connect();
-    } catch (error) {
-      console.error('数据库连接失败:', error);
-      return res.status(500).json({ error: '数据库连接失败' });
-    }
-  }
-
-  // 使用 Express app 处理请求
-  return new Promise((resolve, reject) => {
-    app(req, res, (err: any) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(undefined);
-      }
-    });
-  });
-}
-
-export { app };
+export default app;
