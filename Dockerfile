@@ -4,14 +4,17 @@ WORKDIR /app
 
 COPY . .
 
-# Install all dependencies (including devDependencies for Prisma)
+# Install root dependencies
 RUN npm install
 
+# Install backend dependencies (including devDependencies for Prisma)
+RUN cd packages/backend && npm install
+
 # Generate Prisma client
-RUN npx prisma generate --schema=packages/backend/prisma/schema.prisma
+RUN cd packages/backend && npx prisma generate --schema=prisma/schema.postgresql.prisma
 
 # Build the backend
-RUN npm run build -w packages/backend
+RUN cd packages/backend && npm run build
 
 EXPOSE 3000
 
