@@ -1,9 +1,12 @@
 import axios from 'axios';
 import { message } from 'antd';
 
+// API基础URL - 支持环境变量配置
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
 // 创建axios实例
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

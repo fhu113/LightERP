@@ -144,12 +144,29 @@ const SalesInvoiceList: React.FC = () => {
 
   const fetchCompletedOrders = async () => {
     try {
-      // 只获取已完成的订单（可以创建发票的订单）
-      const result = await salesApi.getSalesOrders({
-        limit: 1000,
-        filters: { status: 'COMPLETED' }
-      });
-      setOrders(result.data);
+      // 获取已确认/完成的订单（可以创建发票的订单）
+      // 先后获取两种状态的订单
+      const [confirmedResult, completedResult] = await Promise.all([
+        salesApi.getSalesOrders({ limit: 1000, filters: { status: 'CONFIRMED' } }),
+        salesApi.getSalesOrders({ limit: 1000, filters: { status: 'COMPLETED' } })
+      ]);
+      const allOrders = [
+        ...(confirmedResult.data || []),
+        ...(completedResult.data || [])
+      ];
+
+      // 获取已开票的订单ID列表
+      const invoicesResult = await salesApi.getSalesInvoices({ limit: 1000 });
+      const invoicedOrderIds = new Set(
+        (invoicesResult.data || []).map((inv: SalesInvoiceResponse) => inv.orderId)
+      );
+
+      // 过滤掉已开票的订单
+      const availableOrders = allOrders.filter(
+        (order: SalesOrderResponse) => !invoicedOrderIds.has(order.id)
+      );
+
+      setOrders(availableOrders);
     } catch (error) {
       console.error('获取订单列表失败:', error);
       message.error('获取订单列表失败');
