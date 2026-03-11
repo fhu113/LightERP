@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "package.json",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "installCommand": "npm install && npx prisma generate --schema=prisma/schema.postgresql.prisma"
+      }
     }
   ],
   "routes": [
@@ -11,5 +14,8 @@
       "src": "/(.*)",
       "dest": "/dist/server.js"
     }
-  ]
+  ],
+  "env": {
+    "DATABASE_URL": "@database-url"
+  }
 }

@@ -1,12 +1,10 @@
-// 轻量级ERP系统数据库模型 - SQLite兼容版
+// 轻量级ERP系统数据库模型 - PostgreSQL生产版
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  // 本地开发使用 SQLite，生产环境使用 PostgreSQL
-  // Vercel 部署时通过环境变量覆盖
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -15,8 +13,8 @@ model AccountingSubject {
   id               String   @id @default(cuid())
   code             String   @unique
   name             String
-  type             String   // ASSET, LIABILITY, EQUITY, COST, REVENUE, EXPENSE
-  balanceDirection String   @default("DEBIT") // DEBIT, CREDIT
+  type             String
+  balanceDirection String   @default("DEBIT")
   voucherItems     VoucherItem[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -92,7 +90,7 @@ model SalesOrder {
   customer     Customer @relation(fields: [customerId], references: [id])
   orderDate    DateTime @default(now())
   deliveryDate DateTime?
-  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  status       String   @default("DRAFT")
   totalAmount  Float    @default(0)
   taxAmount    Float    @default(0)
   createdBy    String?
@@ -111,7 +109,7 @@ model SalesOrder {
 model SalesOrderItem {
   id               String   @id @default(cuid())
   orderId          String
-  order            SalesOrder @relation(fields: [orderId], references: [id])
+  order            SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   materialId       String
   material         Material  @relation(fields: [materialId], references: [id])
   quantity         Float
@@ -134,7 +132,7 @@ model Delivery {
   deliveryDate DateTime @default(now())
   warehouseId  String?
   shippingInfo String?
-  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  status       String   @default("DRAFT")
   items        DeliveryItem[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -148,7 +146,7 @@ model Delivery {
 model DeliveryItem {
   id          String   @id @default(cuid())
   deliveryId  String
-  delivery    Delivery @relation(fields: [deliveryId], references: [id])
+  delivery    Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
   orderItemId String
   orderItem   SalesOrderItem @relation(fields: [orderItemId], references: [id])
   materialId  String
@@ -169,7 +167,7 @@ model PurchaseOrder {
   supplier     Supplier @relation(fields: [supplierId], references: [id])
   orderDate    DateTime @default(now())
   expectedDate DateTime?
-  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  status       String   @default("DRAFT")
   totalAmount  Float    @default(0)
   createdBy    String?
   items        PurchaseOrderItem[]
@@ -186,7 +184,7 @@ model PurchaseOrder {
 model PurchaseOrderItem {
   id               String   @id @default(cuid())
   orderId          String
-  order            PurchaseOrder @relation(fields: [orderId], references: [id])
+  order            PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   materialId       String
   material         Material      @relation(fields: [materialId], references: [id])
   quantity         Float
@@ -205,9 +203,9 @@ model Voucher {
   id          String   @id @default(cuid())
   voucherNo   String   @unique
   voucherDate DateTime @default(now())
-  voucherType String   // GENERAL, ADJUSTMENT, REVERSAL
+  voucherType String
   summary     String
-  status      String   @default("DRAFT") // DRAFT, POSTED, REVERSED
+  status      String   @default("DRAFT")
   createdBy   String?
   items       VoucherItem[]
   createdAt   DateTime @default(now())
@@ -221,7 +219,7 @@ model Voucher {
 model VoucherItem {
   id          String   @id @default(cuid())
   voucherId   String
-  voucher     Voucher  @relation(fields: [voucherId], references: [id])
+  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   subjectId   String
   subject     AccountingSubject @relation(fields: [subjectId], references: [id])
   debitAmount Float    @default(0)
@@ -238,10 +236,10 @@ model InventoryTransaction {
   id              String   @id @default(cuid())
   materialId      String
   material        Material @relation(fields: [materialId], references: [id])
-  transactionType String   // PURCHASE_RECEIPT, SALES_DELIVERY, STOCK_ADJUSTMENT
+  transactionType String
   quantity        Float
   unitCost        Float
-  referenceType   String   // SALES_ORDER, PURCHASE_ORDER, etc.
+  referenceType   String
   referenceId     String
   transactionDate DateTime @default(now())
 
@@ -261,7 +259,7 @@ model PurchaseInvoice {
   invoiceDate DateTime @default(now())
   amount      Float    @default(0)
   taxAmount   Float    @default(0)
-  status      String   @default("DRAFT") // DRAFT, ISSUED, PAID, CANCELLED
+  status      String   @default("DRAFT")
   payments    Payment[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -282,7 +280,7 @@ model SalesInvoice {
   invoiceDate DateTime @default(now())
   amount      Float    @default(0)
   taxAmount   Float    @default(0)
-  status      String   @default("DRAFT") // DRAFT, ISSUED, PAID, CANCELLED
+  status      String   @default("DRAFT")
   receipts    Receipt[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -302,8 +300,8 @@ model Payment {
   invoice       PurchaseInvoice? @relation(fields: [invoiceId], references: [id])
   paymentDate   DateTime @default(now())
   amount        Float    @default(0)
-  paymentMethod String   // CASH, BANK_TRANSFER, CHECK, CREDIT_CARD
-  status        String   @default("PENDING") // PENDING, PAID, CANCELLED
+  paymentMethod String
+  status        String   @default("PENDING")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -322,8 +320,8 @@ model Receipt {
   invoice       SalesInvoice? @relation(fields: [invoiceId], references: [id])
   receiptDate   DateTime @default(now())
   amount        Float    @default(0)
-  paymentMethod String   // CASH, BANK_TRANSFER, CHECK, CREDIT_CARD
-  status        String   @default("PENDING") // PENDING, PAID, CANCELLED
+  paymentMethod String
+  status        String   @default("PENDING")
   createdAt     DateTime @default(now())
 
   @@index([customerId])
@@ -349,7 +347,7 @@ model PurchaseReceipt {
   order        PurchaseOrder @relation(fields: [orderId], references: [id])
   receiptDate  DateTime @default(now())
   warehouseId  String?
-  status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  status       String   @default("DRAFT")
   items        PurchaseReceiptItem[]
   purchaseInvoices PurchaseInvoice[]
   createdAt    DateTime @default(now())
@@ -364,7 +362,7 @@ model PurchaseReceipt {
 model PurchaseReceiptItem {
   id           String   @id @default(cuid())
   receiptId    String
-  receipt      PurchaseReceipt @relation(fields: [receiptId], references: [id])
+  receipt      PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   orderItemId  String
   orderItem    PurchaseOrderItem @relation(fields: [orderItemId], references: [id])
   materialId   String
@@ -386,8 +384,8 @@ model User {
   name      String
   email     String?
   phone     String?
-  role      String   @default("USER") // ADMIN, USER
-  status    String   @default("ACTIVE") // ACTIVE, INACTIVE
+  role      String   @default("USER")
+  status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
