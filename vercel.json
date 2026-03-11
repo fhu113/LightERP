@@ -3,17 +3,24 @@
   "builds": [
     {
       "src": "packages/backend",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "installCommand": "cd packages/backend && npm install && npx prisma generate --schema=prisma/schema.postgresql.prisma",
+        "buildCommand": "cd packages/backend && npx tsc"
+      }
     },
     {
       "src": "packages/frontend",
-      "use": "@vercel/static"
+      "use": "@vercel/static",
+      "config": {
+        "outputDirectory": "dist"
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "packages/backend"
+      "dest": "packages/backend/dist/server.js"
     },
     {
       "src": "/(.*)",

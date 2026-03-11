@@ -47,3 +47,4 @@ docker-data/
 # Prisma
 packages/backend/prisma/migrations/
 !packages/backend/prisma/migrations/.keep
+.vercel
