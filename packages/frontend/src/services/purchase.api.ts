@@ -31,10 +31,10 @@ export const purchaseApi = {
   },
 
   confirmPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> => {
-    return api.post(`/purchase/orders/${id}/confirm`);
+    return api.post(`/api/purchase/orders/${id}/confirm`);
   },
 
   cancelPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> => {
-    return api.post(`/purchase/orders/${id}/cancel`);
+    return api.post(`/api/purchase/orders/${id}/cancel`);
   },
 };

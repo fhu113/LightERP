@@ -37,11 +37,11 @@ export const salesApi = {
   },
 
   confirmOrder: (id: string): Promise<SalesOrderResponse> => {
-    return api.post(`/sales/orders/${id}/confirm`);
+    return api.post(`/api/sales/orders/${id}/confirm`);
   },
 
   cancelOrder: (id: string): Promise<SalesOrderResponse> => {
-    return api.post(`/sales/orders/${id}/cancel`);
+    return api.post(`/api/sales/orders/${id}/cancel`);
   },
 
   // ========== 销售发票 API ==========
@@ -67,11 +67,11 @@ export const salesApi = {
   },
 
   issueInvoice: (id: string): Promise<SalesInvoiceResponse> => {
-    return api.post(`/sales-invoices/${id}/issue`);
+    return api.post(`/api/sales-invoices/${id}/issue`);
   },
 
   cancelInvoice: (id: string): Promise<SalesInvoiceResponse> => {
-    return api.post(`/sales-invoices/${id}/cancel`);
+    return api.post(`/api/sales-invoices/${id}/cancel`);
   },
 
   // ========== 收款单 API ==========
@@ -97,10 +97,10 @@ export const salesApi = {
   },
 
   confirmReceipt: (id: string): Promise<ReceiptResponse> => {
-    return api.post(`/receipts/${id}/confirm`);
+    return api.post(`/api/receipts/${id}/confirm`);
   },
 
   cancelReceipt: (id: string): Promise<ReceiptResponse> => {
-    return api.post(`/receipts/${id}/cancel`);
+    return api.post(`/api/receipts/${id}/cancel`);
   },
 };

@@ -31,11 +31,11 @@ export const paymentApi = {
   },
 
   confirmPayment: (id: string): Promise<PaymentResponse> => {
-    return api.post(`/payments/${id}/confirm`);
+    return api.post(`/api/payments/${id}/confirm`);
   },
 
   cancelPayment: (id: string): Promise<PaymentResponse> => {
-    return api.post(`/payments/${id}/cancel`);
+    return api.post(`/api/payments/${id}/cancel`);
   },
 
   getInvoicesForPayment: (): Promise<any[]> => {

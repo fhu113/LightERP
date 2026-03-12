@@ -31,11 +31,11 @@ export const purchaseInvoiceApi = {
   },
 
   confirmPurchaseInvoice: (id: string): Promise<PurchaseInvoiceResponse> => {
-    return api.post(`/purchase-invoices/${id}/confirm`);
+    return api.post(`/api/purchase-invoices/${id}/confirm`);
   },
 
   cancelPurchaseInvoice: (id: string): Promise<PurchaseInvoiceResponse> => {
-    return api.post(`/purchase-invoices/${id}/cancel`);
+    return api.post(`/api/purchase-invoices/${id}/cancel`);
   },
 
   getReceiptsForInvoicing: (): Promise<any[]> => {

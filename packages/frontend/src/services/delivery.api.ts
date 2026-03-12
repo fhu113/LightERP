@@ -31,10 +31,10 @@ export const deliveryApi = {
   },
 
   confirmDelivery: (id: string): Promise<DeliveryResponse> => {
-    return api.post(`/deliveries/${id}/confirm`);
+    return api.post(`/api/deliveries/${id}/confirm`);
   },
 
   cancelDelivery: (id: string): Promise<DeliveryResponse> => {
-    return api.post(`/deliveries/${id}/cancel`);
+    return api.post(`/api/deliveries/${id}/cancel`);
   },
 };
