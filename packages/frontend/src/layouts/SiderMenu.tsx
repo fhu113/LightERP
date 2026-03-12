@@ -148,9 +148,19 @@ const SiderMenu: React.FC = () => {
       ],
     },
     {
-      key: '/system',
+      key: 'system',
       icon: <SettingOutlined />,
       label: '系统设置',
+      children: [
+        {
+          key: '/system/users',
+          label: '用户管理',
+        },
+        {
+          key: '/system/config',
+          label: '系统配置',
+        },
+      ],
     },
   ];
 

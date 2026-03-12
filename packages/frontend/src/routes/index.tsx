@@ -21,6 +21,7 @@ import SalesReport from '../pages/reports/SalesReport';
 import PurchaseReport from '../pages/reports/PurchaseReport';
 import InventoryReport from '../pages/reports/InventoryReport';
 import UserManagement from '../pages/system/UserManagement';
+import SystemConfig from '../pages/system/SystemConfig';
 
 const AppRoutes: React.FC = () => {
   return (
@@ -60,6 +61,7 @@ const AppRoutes: React.FC = () => {
         </Route>
         <Route path="system">
           <Route path="users" element={<UserManagement />} />
+          <Route path="config" element={<SystemConfig />} />
         </Route>
         {/* 默认重定向到首页 */}
         <Route path="*" element={<Navigate to="/" replace />} />
