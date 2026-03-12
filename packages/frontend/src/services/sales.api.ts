@@ -11,6 +11,7 @@ import {
   UpdateReceiptDto,
   PaginatedResult,
   QueryParams,
+  OrderProcessStatus,
 } from '../types';
 
 export const salesApi = {
@@ -22,6 +23,10 @@ export const salesApi = {
 
   getSalesOrderById: (id: string): Promise<SalesOrderResponse> => {
     return api.get(`/api/sales/orders/${id}`);
+  },
+
+  getOrderProcessStatus: (id: string): Promise<OrderProcessStatus> => {
+    return api.get(`/api/sales/orders/${id}/status`);
   },
 
   createSalesOrder: (data: CreateSalesOrderDto): Promise<SalesOrderResponse> => {

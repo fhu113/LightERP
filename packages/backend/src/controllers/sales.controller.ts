@@ -35,6 +35,18 @@ export class SalesController {
     }
   ];
 
+  // 获取订单的发货、开票、收款状态
+  static getOrderProcessStatus = [
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const result = await salesService.getOrderProcessStatus(req.params.id);
+        res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
+
   static createSalesOrder = [
     validateBody(createSalesOrderSchema),
     async (req: Request, res: Response, next: NextFunction) => {

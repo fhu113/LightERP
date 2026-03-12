@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, Input, InputNumber, Select, Popconfirm } from 'antd';
+import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, Input, InputNumber, Select, Popconfirm, Descriptions } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
 import { salesApi } from '../../services/sales.api';
 import { masterApi } from '../../services/master.api';
-import { SalesOrderResponse, SalesOrderStatus, CreateSalesOrderDto, SalesOrderItemDto, PaginatedResult, Customer, Material } from '../../types';
+import { SalesOrderResponse, SalesOrderStatus, CreateSalesOrderDto, SalesOrderItemDto, PaginatedResult, Customer, Material, OrderProcessStatus, ProcessStatus } from '../../types';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -15,6 +15,8 @@ const SalesOrderList: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<SalesOrderResponse | null>(null);
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<SalesOrderResponse | null>(null);
+  const [orderProcessStatus, setOrderProcessStatus] = useState<OrderProcessStatus | null>(null);
+  const [processLoading, setProcessLoading] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [form] = Form.useForm();
@@ -25,6 +27,21 @@ const SalesOrderList: React.FC = () => {
     total: 0,
     totalPages: 0,
   });
+
+  // 流程状态颜色映射
+  const processStatusColor: Record<ProcessStatus, string> = {
+    none: 'default',
+    draft: 'default',
+    partial: 'processing',
+    completed: 'success',
+  };
+
+  const processStatusText: Record<ProcessStatus, string> = {
+    none: '未创建',
+    draft: '草稿',
+    partial: '部分完成',
+    completed: '已完成',
+  };
 
   // 状态标签颜色映射
   const statusColor: Record<SalesOrderStatus, string> = {
@@ -210,9 +227,20 @@ const SalesOrderList: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleView = (order: SalesOrderResponse) => {
+  const handleView = async (order: SalesOrderResponse) => {
     setViewingOrder(order);
     setViewModalVisible(true);
+    // 获取订单流程状态
+    setProcessLoading(true);
+    try {
+      const status = await salesApi.getOrderProcessStatus(order.id);
+      setOrderProcessStatus(status);
+    } catch (error) {
+      console.error('获取订单流程状态失败:', error);
+      setOrderProcessStatus(null);
+    } finally {
+      setProcessLoading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -485,10 +513,59 @@ const SalesOrderList: React.FC = () => {
                 { title: '数量', dataIndex: 'quantity', key: 'quantity', render: (value) => value.toFixed(2) },
                 { title: '单价', dataIndex: 'unitPrice', key: 'unitPrice', render: (value) => `¥${value.toFixed(2)}` },
                 { title: '金额', dataIndex: 'amount', key: 'amount', render: (value) => `¥${value.toFixed(2)}` },
-                { title: '已发货数量', dataIndex: 'deliveredQuantity', key: 'deliveredQuantity', render: (value) => value.toFixed(2) },
+                { title: '已发货数量', dataIndex: 'deliveredQuantity', key: 'deliveredQuantity', render: (value) => value?.toFixed(2) || '0.00' },
               ]}
               pagination={false}
             />
+
+            {/* 订单流程状态 */}
+            <Typography.Title level={5} style={{ marginTop: 24 }}>订单流程状态</Typography.Title>
+            {processLoading ? (
+              <div>加载中...</div>
+            ) : orderProcessStatus ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                {/* 发货状态 */}
+                <Card size="small" title="发货状态">
+                  <Tag color={processStatusColor[orderProcessStatus.delivery.status]}>
+                    {processStatusText[orderProcessStatus.delivery.status]}
+                  </Tag>
+                  {orderProcessStatus.delivery.count > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div>发货单数量: {orderProcessStatus.delivery.count}</div>
+                      <div>发货数量: {orderProcessStatus.delivery.totalQuantity}</div>
+                    </div>
+                  )}
+                </Card>
+
+                {/* 开票状态 */}
+                <Card size="small" title="开票状态">
+                  <Tag color={processStatusColor[orderProcessStatus.invoice.status]}>
+                    {processStatusText[orderProcessStatus.invoice.status]}
+                  </Tag>
+                  {orderProcessStatus.invoice.count > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div>发票数量: {orderProcessStatus.invoice.count}</div>
+                      <div>发票金额: ¥{orderProcessStatus.invoice.totalAmount.toFixed(2)}</div>
+                    </div>
+                  )}
+                </Card>
+
+                {/* 收款状态 */}
+                <Card size="small" title="收款状态">
+                  <Tag color={processStatusColor[orderProcessStatus.receipt.status]}>
+                    {processStatusText[orderProcessStatus.receipt.status]}
+                  </Tag>
+                  {orderProcessStatus.receipt.count > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div>收款单数量: {orderProcessStatus.receipt.count}</div>
+                      <div>收款金额: ¥{orderProcessStatus.receipt.totalAmount.toFixed(2)}</div>
+                    </div>
+                  )}
+                </Card>
+              </div>
+            ) : (
+              <div>暂无流程信息</div>
+            )}
           </div>
         )}
       </Modal>

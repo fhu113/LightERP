@@ -189,6 +189,53 @@ export interface SalesOrderResponse {
   updatedAt: string;
 }
 
+// 订单流程状态类型
+export type ProcessStatus = 'none' | 'draft' | 'partial' | 'completed';
+
+export interface OrderProcessStatus {
+  orderId: string;
+  orderNo: string;
+  orderStatus: SalesOrderStatus;
+  totalAmount: number;
+  taxAmount: number;
+  delivery: {
+    status: ProcessStatus;
+    count: number;
+    totalQuantity: number;
+    items: Array<{
+      id: string;
+      deliveryNo: string;
+      status: string;
+      deliveryDate: string;
+      quantity: number;
+    }>;
+  };
+  invoice: {
+    status: ProcessStatus;
+    count: number;
+    totalAmount: number;
+    items: Array<{
+      id: string;
+      invoiceNo: string;
+      status: string;
+      invoiceDate: string;
+      amount: number;
+    }>;
+  };
+  receipt: {
+    status: ProcessStatus;
+    count: number;
+    totalAmount: number;
+    items: Array<{
+      id: string;
+      receiptNo: string;
+      status: string;
+      receiptDate: string;
+      amount: number;
+    }>;
+  };
+}
+
 export interface CreateSalesOrderDto {
   customerId: string;
   orderDate?: Date;

@@ -76,6 +76,102 @@ export class SalesService {
     return this.mapToSalesOrderResponse(order);
   }
 
+  // 获取订单的发货、开票、收款状态
+  async getOrderProcessStatus(orderId: string) {
+    // 获取订单信息
+    const order = await prisma.salesOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true
+      }
+    });
+
+    if (!order) {
+      throw new AppError('销售订单不存在', 404);
+    }
+
+    // 获取关联的发货单
+    const deliveries = await prisma.delivery.findMany({
+      where: { orderId },
+      include: { items: true }
+    });
+
+    // 获取关联的销售发票
+    const invoices = await prisma.salesInvoice.findMany({
+      where: { orderId }
+    });
+
+    // 获取关联的收款单
+    const receipts = await prisma.receipt.findMany({
+      where: { invoiceId: { in: invoices.map(inv => inv.id) } }
+    });
+
+    // 计算发货状态
+    const totalOrderQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalDeliveredQuantity = deliveries.reduce((sum, d) =>
+      sum + d.items.reduce((s, i) => s + i.quantity, 0), 0
+    );
+    const deliveryStatus = deliveries.length === 0 ? 'none' :
+      deliveries.every(d => d.status === 'COMPLETED') ? 'completed' :
+      deliveries.some(d => d.status === 'CONFIRMED') ? 'partial' : 'draft';
+
+    // 计算开票状态
+    const totalInvoiceAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
+    const invoiceStatus = invoices.length === 0 ? 'none' :
+      invoices.every(inv => inv.status === 'CONFIRMED') ? 'completed' :
+      invoices.some(inv => inv.status === 'CONFIRMED') ? 'partial' : 'draft';
+
+    // 计算收款状态
+    const totalReceiptAmount = receipts.reduce((sum, r) => sum + r.amount, 0);
+    const receiptStatus = receipts.length === 0 ? 'none' :
+      receipts.every(r => r.status === 'CONFIRMED') ? 'completed' :
+      receipts.some(r => r.status === 'CONFIRMED') ? 'partial' : 'draft';
+
+    return {
+      orderId: order.id,
+      orderNo: order.orderNo,
+      orderStatus: order.status,
+      totalAmount: order.totalAmount,
+      taxAmount: order.taxAmount,
+      delivery: {
+        status: deliveryStatus,
+        count: deliveries.length,
+        totalQuantity: totalDeliveredQuantity,
+        items: deliveries.map(d => ({
+          id: d.id,
+          deliveryNo: d.deliveryNo,
+          status: d.status,
+          deliveryDate: d.deliveryDate,
+          quantity: d.items.reduce((s, i) => s + i.quantity, 0)
+        }))
+      },
+      invoice: {
+        status: invoiceStatus,
+        count: invoices.length,
+        totalAmount,
+        items: invoices.map(inv => ({
+          id: inv.id,
+          invoiceNo: inv.invoiceNo,
+          status: inv.status,
+          invoiceDate: inv.invoiceDate,
+          amount: inv.amount
+        }))
+      },
+      receipt: {
+        status: receiptStatus,
+        count: receipts.length,
+        totalAmount,
+        items: receipts.map(r => ({
+          id: r.id,
+          receiptNo: r.receiptNo,
+          status: r.status,
+          receiptDate: r.receiptDate,
+          amount: r.amount
+        }))
+      }
+    };
+  }
+
   async createSalesOrder(data: CreateSalesOrderDto): Promise<SalesOrderResponse> {
     // 检查客户是否存在
     const customer = await prisma.customer.findUnique({
