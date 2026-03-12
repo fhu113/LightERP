@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { message } from 'antd';
 
-// API基础URL - 支持环境变量配置
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// API基础URL - 生产环境固定使用 /api 前缀，通过 Vercel 代理到后端
+const API_BASE_URL = import.meta.env.MODE === 'production' ? '/api' : (import.meta.env.VITE_API_URL || '/api');
 
 // 创建axios实例
 const api = axios.create({
