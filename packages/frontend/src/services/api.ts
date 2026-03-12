@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { message } from 'antd';
 
-// API基础URL
-const API_BASE_URL = '/api';
+// API基础URL - 各服务文件中已包含完整路径
+const API_BASE_URL = '';
 
 // 创建axios实例
 const api = axios.create({
