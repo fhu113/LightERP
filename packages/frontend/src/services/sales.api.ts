@@ -33,7 +33,7 @@ export const salesApi = {
   },
 
   deleteSalesOrder: (id: string): Promise<void> => {
-    return api.delete(`/sales/orders/${id}`);
+    return api.delete(`/api/sales/orders/${id}`);
   },
 
   confirmOrder: (id: string): Promise<SalesOrderResponse> => {
@@ -63,7 +63,7 @@ export const salesApi = {
   },
 
   deleteSalesInvoice: (id: string): Promise<void> => {
-    return api.delete(`/sales-invoices/${id}`);
+    return api.delete(`/api/sales-invoices/${id}`);
   },
 
   issueInvoice: (id: string): Promise<SalesInvoiceResponse> => {
@@ -93,7 +93,7 @@ export const salesApi = {
   },
 
   deleteReceipt: (id: string): Promise<void> => {
-    return api.delete(`/receipts/${id}`);
+    return api.delete(`/api/receipts/${id}`);
   },
 
   confirmReceipt: (id: string): Promise<ReceiptResponse> => {

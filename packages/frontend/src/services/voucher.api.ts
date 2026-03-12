@@ -54,7 +54,7 @@ export const voucherApi = {
 
   // 删除凭证
   deleteVoucher: (id: string) => {
-    return api.delete(`/vouchers/${id}`);
+    return api.delete(`/api/vouchers/${id}`);
   },
 
   // 获取科目余额

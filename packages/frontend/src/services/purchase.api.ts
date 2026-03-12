@@ -27,7 +27,7 @@ export const purchaseApi = {
   },
 
   deletePurchaseOrder: (id: string): Promise<void> => {
-    return api.delete(`/purchase/orders/${id}`);
+    return api.delete(`/api/purchase/orders/${id}`);
   },
 
   confirmPurchaseOrder: (id: string): Promise<PurchaseOrderResponse> => {

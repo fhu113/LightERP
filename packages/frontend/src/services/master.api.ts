@@ -41,7 +41,7 @@ export const masterApi = {
   },
 
   deleteSubject: (id: string): Promise<void> => {
-    return api.delete(`/master/subjects/${id}`);
+    return api.delete(`/api/master/subjects/${id}`);
   },
 
   // ========== 客户 API ==========
@@ -63,7 +63,7 @@ export const masterApi = {
   },
 
   deleteCustomer: (id: string): Promise<void> => {
-    return api.delete(`/master/customers/${id}`);
+    return api.delete(`/api/master/customers/${id}`);
   },
 
   // ========== 供应商 API ==========
@@ -85,7 +85,7 @@ export const masterApi = {
   },
 
   deleteSupplier: (id: string): Promise<void> => {
-    return api.delete(`/master/suppliers/${id}`);
+    return api.delete(`/api/master/suppliers/${id}`);
   },
 
   // ========== 物料 API ==========
@@ -107,6 +107,6 @@ export const masterApi = {
   },
 
   deleteMaterial: (id: string): Promise<void> => {
-    return api.delete(`/master/materials/${id}`);
+    return api.delete(`/api/master/materials/${id}`);
   },
 };

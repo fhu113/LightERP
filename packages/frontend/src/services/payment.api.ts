@@ -27,7 +27,7 @@ export const paymentApi = {
   },
 
   deletePayment: (id: string): Promise<void> => {
-    return api.delete(`/payments/${id}`);
+    return api.delete(`/api/payments/${id}`);
   },
 
   confirmPayment: (id: string): Promise<PaymentResponse> => {

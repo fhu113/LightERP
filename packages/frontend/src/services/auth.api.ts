@@ -49,6 +49,6 @@ export const authApi = {
 
   // 删除用户
   deleteUser: (id: string) => {
-    return api.delete(`/auth/users/${id}`);
+    return api.delete(`/api/auth/users/${id}`);
   },
 };

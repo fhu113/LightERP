@@ -27,7 +27,7 @@ export const deliveryApi = {
   },
 
   deleteDelivery: (id: string): Promise<void> => {
-    return api.delete(`/deliveries/${id}`);
+    return api.delete(`/api/deliveries/${id}`);
   },
 
   confirmDelivery: (id: string): Promise<DeliveryResponse> => {
