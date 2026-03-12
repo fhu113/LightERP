@@ -15,7 +15,7 @@ export const purchaseApi = {
   },
 
   getPurchaseOrderById: (id: string): Promise<PurchaseOrderResponse> => {
-    return api.get(`/purchase/orders/${id}`);
+    return api.get(`/api/purchase/orders/${id}`);
   },
 
   createPurchaseOrder: (data: CreatePurchaseOrderDto): Promise<PurchaseOrderResponse> => {
@@ -23,7 +23,7 @@ export const purchaseApi = {
   },
 
   updatePurchaseOrder: (id: string, data: UpdatePurchaseOrderDto): Promise<PurchaseOrderResponse> => {
-    return api.put(`/purchase/orders/${id}`, data);
+    return api.put(`/api/purchase/orders/${id}`, data);
   },
 
   deletePurchaseOrder: (id: string): Promise<void> => {

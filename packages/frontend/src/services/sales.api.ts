@@ -21,7 +21,7 @@ export const salesApi = {
   },
 
   getSalesOrderById: (id: string): Promise<SalesOrderResponse> => {
-    return api.get(`/sales/orders/${id}`);
+    return api.get(`/api/sales/orders/${id}`);
   },
 
   createSalesOrder: (data: CreateSalesOrderDto): Promise<SalesOrderResponse> => {
@@ -29,7 +29,7 @@ export const salesApi = {
   },
 
   updateSalesOrder: (id: string, data: UpdateSalesOrderDto): Promise<SalesOrderResponse> => {
-    return api.put(`/sales/orders/${id}`, data);
+    return api.put(`/api/sales/orders/${id}`, data);
   },
 
   deleteSalesOrder: (id: string): Promise<void> => {
