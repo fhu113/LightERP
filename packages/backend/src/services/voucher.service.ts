@@ -8,6 +8,7 @@ import {
   UpdateVoucherDto,
 } from '../types/voucher';
 import { PaginatedResult, QueryParams } from '../types';
+import { getSubjectIdFromConfig, isAutoGenerateVoucherEnabled, CONFIG_KEYS } from './system-config.service';
 
 // 生成凭证编号: V-YYYYMMDD-0001
 async function generateVoucherNo(): Promise<string> {
@@ -340,6 +341,84 @@ async function getSubjectIdByCode(code: string): Promise<string | null> {
     where: { code },
   });
   return subject?.id || null;
+}
+
+// 发货确认时生成凭证
+// 借：主营业务成本（配置）
+// 贷：库存商品（配置）
+export async function generateDeliveryVoucher(
+  deliveryId: string
+): Promise<VoucherResponse | null> {
+  // 检查是否启用自动生成凭证
+  const isEnabled = await isAutoGenerateVoucherEnabled();
+  if (!isEnabled) {
+    console.log('自动生成凭证未启用');
+    return null;
+  }
+
+  const delivery = await prisma.delivery.findUnique({
+    where: { id: deliveryId },
+    include: {
+      order: {
+        include: {
+          items: {
+            include: {
+              material: true
+            }
+          }
+        }
+      }
+    },
+  });
+
+  if (!delivery) {
+    throw new AppError('发货单不存在', 404);
+  }
+
+  // 获取配置科目ID
+  const costSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_DELIVERY_COST_SUBJECT_ID);
+  const inventorySubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_DELIVERY_INVENTORY_SUBJECT_ID);
+
+  if (!costSubjectId || !inventorySubjectId) {
+    console.warn('发货凭证科目未配置，跳过生成凭证');
+    return null;
+  }
+
+  // 计算总成本（使用移动加权平均成本）
+  let totalCost = 0;
+  for (const item of delivery.order.items) {
+    const material = item.material;
+    const costPrice = material.costPrice || 0;
+    totalCost += costPrice * item.quantity;
+  }
+
+  if (totalCost <= 0) {
+    console.warn('成本为0，跳过生成凭证');
+    return null;
+  }
+
+  const summary = `发货单 ${delivery.deliveryNo} - 成本结转`;
+
+  const voucher = await createVoucher({
+    voucherType: 'GENERAL',
+    summary,
+    items: [
+      {
+        subjectId: costSubjectId,
+        debitAmount: totalCost,
+        creditAmount: 0,
+        description: '借：主营业务成本',
+      },
+      {
+        subjectId: inventorySubjectId,
+        debitAmount: 0,
+        creditAmount: totalCost,
+        description: '贷：库存商品',
+      },
+    ],
+  });
+
+  return voucher;
 }
 
 // 销售发票确认时生成凭证

@@ -18,6 +18,7 @@ import paymentRoutes from './routes/payment.routes';
 import voucherRoutes from './routes/voucher.routes';
 import reportRoutes from './routes/report.routes';
 import authRoutes from './routes/auth.routes';
+import systemConfigRoutes from './routes/system-config.routes';
 
 // 验证配置
 validateConfig();
@@ -86,6 +87,9 @@ app.use(`${config.app.apiPrefix}/reports`, reportRoutes);
 
 // 认证路由
 app.use(`${config.app.apiPrefix}/auth`, authRoutes);
+
+// 系统配置路由
+app.use(`${config.app.apiPrefix}/system-config`, systemConfigRoutes);
 
 // 404处理
 app.use(notFoundHandler);

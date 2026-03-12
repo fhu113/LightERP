@@ -8,6 +8,7 @@ import {
 } from '../types/delivery';
 import { PaginatedResult, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { generateDeliveryVoucher } from './voucher.service';
 
 export class DeliveryService {
   // ========== 发货单服务 ==========
@@ -356,6 +357,13 @@ export class DeliveryService {
         }
       }
     });
+
+    // 自动生成凭证
+    try {
+      await generateDeliveryVoucher(id);
+    } catch (error) {
+      console.error('生成发货凭证失败:', error);
+    }
 
     return this.mapToDeliveryResponse(delivery);
   }
