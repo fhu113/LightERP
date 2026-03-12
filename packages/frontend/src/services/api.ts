@@ -1,8 +1,12 @@
 import axios from 'axios';
 import { message } from 'antd';
 
-// API基础URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// API基础URL - 使用 this 防止被 Vite tree-shaking 优化掉
+const getApiBaseUrl = () => {
+  // Vite 环境变量，生产环境默认 /api
+  return import.meta.env.VITE_API_URL || '/api';
+};
+const API_BASE_URL = getApiBaseUrl();
 
 // 创建axios实例
 const api = axios.create({
