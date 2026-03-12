@@ -148,7 +148,7 @@ export class SalesService {
       invoice: {
         status: invoiceStatus,
         count: invoices.length,
-        totalAmount,
+        totalAmount: totalInvoiceAmount,
         items: invoices.map(inv => ({
           id: inv.id,
           invoiceNo: inv.invoiceNo,
@@ -160,7 +160,7 @@ export class SalesService {
       receipt: {
         status: receiptStatus,
         count: receipts.length,
-        totalAmount,
+        totalAmount: totalReceiptAmount,
         items: receipts.map(r => ({
           id: r.id,
           receiptNo: r.receiptNo,
