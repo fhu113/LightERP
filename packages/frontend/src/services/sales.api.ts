@@ -17,7 +17,7 @@ export const salesApi = {
   // ========== 销售订单 API ==========
 
   getSalesOrders: (params?: QueryParams): Promise<PaginatedResult<SalesOrderResponse>> => {
-    return api.get('/sales/orders', { params });
+    return api.get( '/api/sales/orders', { params });
   },
 
   getSalesOrderById: (id: string): Promise<SalesOrderResponse> => {
@@ -25,7 +25,7 @@ export const salesApi = {
   },
 
   createSalesOrder: (data: CreateSalesOrderDto): Promise<SalesOrderResponse> => {
-    return api.post('/sales/orders', data);
+    return api.post( '/api/sales/orders', data);
   },
 
   updateSalesOrder: (id: string, data: UpdateSalesOrderDto): Promise<SalesOrderResponse> => {

@@ -15,12 +15,12 @@ export interface InventoryTransaction {
 export const inventoryApi = {
   // 获取库存列表
   getInventory: (params?: { warehouseId?: string; categoryId?: string }) => {
-    return api.get('/master/materials', { params });
+    return api.get( '/api/master/materials', { params });
   },
 
   // 获取库存流水
   getTransactions: (params?: { materialId?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) => {
-    return api.get('/inventory/transactions', { params });
+    return api.get( '/api/inventory/transactions', { params });
   },
 
   // 创建库存调整单
@@ -31,6 +31,6 @@ export const inventoryApi = {
     adjustmentType: string;
     reason: string;
   }) => {
-    return api.post('/inventory/adjustments', data);
+    return api.post( '/api/inventory/adjustments', data);
   },
 };

@@ -11,7 +11,7 @@ export const purchaseApi = {
   // ========== 采购订单 API ==========
 
   getPurchaseOrders: (params?: QueryParams): Promise<PaginatedResult<PurchaseOrderResponse>> => {
-    return api.get('/purchase/orders', { params });
+    return api.get( '/api/purchase/orders', { params });
   },
 
   getPurchaseOrderById: (id: string): Promise<PurchaseOrderResponse> => {
@@ -19,7 +19,7 @@ export const purchaseApi = {
   },
 
   createPurchaseOrder: (data: CreatePurchaseOrderDto): Promise<PurchaseOrderResponse> => {
-    return api.post('/purchase/orders', data);
+    return api.post( '/api/purchase/orders', data);
   },
 
   updatePurchaseOrder: (id: string, data: UpdatePurchaseOrderDto): Promise<PurchaseOrderResponse> => {

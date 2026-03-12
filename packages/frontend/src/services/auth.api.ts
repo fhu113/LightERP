@@ -19,27 +19,27 @@ export interface LoginResult {
 export const authApi = {
   // 登录
   login: (params: LoginParams) => {
-    return api.post<LoginResult>('/auth/login', params);
+    return api.post<LoginResult>( '/api/auth/login', params);
   },
 
   // 注册
   register: (data: { username: string; password: string; name: string; email?: string }) => {
-    return api.post('/auth/register', data);
+    return api.post( '/api/auth/register', data);
   },
 
   // 获取当前用户
   getCurrentUser: () => {
-    return api.get('/auth/users/me');
+    return api.get( '/api/auth/users/me');
   },
 
   // 获取用户列表
   getUsers: () => {
-    return api.get('/auth/users');
+    return api.get( '/api/auth/users');
   },
 
   // 创建用户
   createUser: (data: { username: string; password: string; name: string; email?: string; role?: string }) => {
-    return api.post('/auth/users', data);
+    return api.post( '/api/auth/users', data);
   },
 
   // 更新用户

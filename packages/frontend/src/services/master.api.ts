@@ -21,11 +21,11 @@ export const masterApi = {
   // ========== 会计科目 API ==========
 
   getSubjects: (params?: QueryParams): Promise<PaginatedResult<Subject>> => {
-    return api.get('/master/subjects', { params });
+    return api.get('/api/master/subjects', { params });
   },
 
   getSubjectTree: (): Promise<SubjectTree[]> => {
-    return api.get('/master/subjects/tree');
+    return api.get('/api/master/subjects/tree');
   },
 
   getSubjectById: (id: string): Promise<Subject> => {
@@ -33,7 +33,7 @@ export const masterApi = {
   },
 
   createSubject: (data: CreateSubjectDto): Promise<Subject> => {
-    return api.post('/master/subjects', data);
+    return api.post('/api/master/subjects', data);
   },
 
   updateSubject: (id: string, data: UpdateSubjectDto): Promise<Subject> => {
@@ -47,7 +47,7 @@ export const masterApi = {
   // ========== 客户 API ==========
 
   getCustomers: (params?: QueryParams): Promise<PaginatedResult<Customer>> => {
-    return api.get('/master/customers', { params });
+    return api.get('/api/master/customers', { params });
   },
 
   getCustomerById: (id: string): Promise<Customer> => {
@@ -55,7 +55,7 @@ export const masterApi = {
   },
 
   createCustomer: (data: CreateCustomerDto): Promise<Customer> => {
-    return api.post('/master/customers', data);
+    return api.post('/api/master/customers', data);
   },
 
   updateCustomer: (id: string, data: UpdateCustomerDto): Promise<Customer> => {
@@ -69,7 +69,7 @@ export const masterApi = {
   // ========== 供应商 API ==========
 
   getSuppliers: (params?: QueryParams): Promise<PaginatedResult<Supplier>> => {
-    return api.get('/master/suppliers', { params });
+    return api.get('/api/master/suppliers', { params });
   },
 
   getSupplierById: (id: string): Promise<Supplier> => {
@@ -77,7 +77,7 @@ export const masterApi = {
   },
 
   createSupplier: (data: CreateSupplierDto): Promise<Supplier> => {
-    return api.post('/master/suppliers', data);
+    return api.post('/api/master/suppliers', data);
   },
 
   updateSupplier: (id: string, data: UpdateSupplierDto): Promise<Supplier> => {
@@ -91,7 +91,7 @@ export const masterApi = {
   // ========== 物料 API ==========
 
   getMaterials: (params?: QueryParams): Promise<PaginatedResult<Material>> => {
-    return api.get('/master/materials', { params });
+    return api.get('/api/master/materials', { params });
   },
 
   getMaterialById: (id: string): Promise<Material> => {
@@ -99,7 +99,7 @@ export const masterApi = {
   },
 
   createMaterial: (data: CreateMaterialDto): Promise<Material> => {
-    return api.post('/master/materials', data);
+    return api.post('/api/master/materials', data);
   },
 
   updateMaterial: (id: string, data: UpdateMaterialDto): Promise<Material> => {
