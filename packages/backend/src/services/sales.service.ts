@@ -13,7 +13,7 @@ export class SalesService {
   // ========== 销售订单服务 ==========
 
   async getSalesOrders(params: QueryParams): Promise<PaginatedResult<SalesOrderResponse>> {
-    const { page = 1, limit = 20, sortBy = 'orderDate', sortOrder = 'desc', search } = params;
+    const { page = 1, limit = 20, sortBy = 'orderDate', sortOrder = 'desc', search, filters } = params;
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
@@ -25,6 +25,10 @@ export class SalesService {
         { customer: { name: { contains: search } } },
         { customer: { code: { contains: search } } }
       ];
+    }
+    // 支持 status 过滤
+    if (filters?.status) {
+      where.status = filters.status;
     }
 
     const [orders, total] = await Promise.all([

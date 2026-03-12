@@ -155,6 +155,13 @@ const SalesInvoiceList: React.FC = () => {
         ...(completedResult.data || [])
       ];
 
+      // 使用 Set 去重
+      const uniqueOrdersMap = new Map();
+      allOrders.forEach((order: SalesOrderResponse) => {
+        uniqueOrdersMap.set(order.id, order);
+      });
+      const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
       // 获取已开票的订单ID列表
       const invoicesResult = await salesApi.getSalesInvoices({ limit: 1000 });
       const invoicedOrderIds = new Set(
@@ -162,7 +169,7 @@ const SalesInvoiceList: React.FC = () => {
       );
 
       // 过滤掉已开票的订单
-      const availableOrders = allOrders.filter(
+      const availableOrders = uniqueOrders.filter(
         (order: SalesOrderResponse) => !invoicedOrderIds.has(order.id)
       );
 
