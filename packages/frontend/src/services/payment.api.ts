@@ -11,7 +11,7 @@ export const paymentApi = {
   // ========== 付款单 API ==========
 
   getPayments: (params?: QueryParams): Promise<PaginatedResult<PaymentResponse>> => {
-    return api.get('/payments', { params });
+    return api.get('/api/payments', { params });
   },
 
   getPaymentById: (id: string): Promise<PaymentResponse> => {
@@ -19,7 +19,7 @@ export const paymentApi = {
   },
 
   createPayment: (data: CreatePaymentDto): Promise<PaymentResponse> => {
-    return api.post('/payments', data);
+    return api.post('/api/payments', data);
   },
 
   updatePayment: (id: string, data: UpdatePaymentDto): Promise<PaymentResponse> => {
@@ -39,6 +39,6 @@ export const paymentApi = {
   },
 
   getInvoicesForPayment: (): Promise<any[]> => {
-    return api.get('/payments/for-payment');
+    return api.get('/api/payments/for-payment');
   },
 };

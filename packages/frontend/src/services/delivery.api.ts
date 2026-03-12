@@ -11,19 +11,19 @@ export const deliveryApi = {
   // ========== 发货单 API ==========
 
   getDeliveries: (params?: QueryParams): Promise<PaginatedResult<DeliveryResponse>> => {
-    return api.get('/deliveries', { params });
+    return api.get('/api/deliveries', { params });
   },
 
   getDeliveryById: (id: string): Promise<DeliveryResponse> => {
-    return api.get(`/deliveries/${id}`);
+    return api.get(`/api/deliveries/${id}`);
   },
 
   createDelivery: (data: CreateDeliveryDto): Promise<DeliveryResponse> => {
-    return api.post('/deliveries', data);
+    return api.post('/api/deliveries', data);
   },
 
   updateDelivery: (id: string, data: UpdateDeliveryDto): Promise<DeliveryResponse> => {
-    return api.put(`/deliveries/${id}`, data);
+    return api.put(`/api/deliveries/${id}`, data);
   },
 
   deleteDelivery: (id: string): Promise<void> => {

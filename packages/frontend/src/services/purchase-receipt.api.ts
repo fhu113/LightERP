@@ -11,19 +11,19 @@ export const purchaseReceiptApi = {
   // ========== 采购收货单 API ==========
 
   getPurchaseReceipts: (params?: QueryParams): Promise<PaginatedResult<PurchaseReceiptResponse>> => {
-    return api.get('/purchase-receipts', { params });
+    return api.get('/api/purchase-receipts', { params });
   },
 
   getPurchaseReceiptById: (id: string): Promise<PurchaseReceiptResponse> => {
-    return api.get(`/purchase-receipts/${id}`);
+    return api.get(`/api/purchase-receipts/${id}`);
   },
 
   createPurchaseReceipt: (data: CreatePurchaseReceiptDto): Promise<PurchaseReceiptResponse> => {
-    return api.post('/purchase-receipts', data);
+    return api.post('/api/purchase-receipts', data);
   },
 
   updatePurchaseReceipt: (id: string, data: UpdatePurchaseReceiptDto): Promise<PurchaseReceiptResponse> => {
-    return api.put(`/purchase-receipts/${id}`, data);
+    return api.put(`/api/purchase-receipts/${id}`, data);
   },
 
   deletePurchaseReceipt: (id: string): Promise<void> => {
@@ -31,10 +31,10 @@ export const purchaseReceiptApi = {
   },
 
   confirmPurchaseReceipt: (id: string): Promise<PurchaseReceiptResponse> => {
-    return api.post(`/purchase-receipts/${id}/confirm`);
+    return api.post(`/api/purchase-receipts/${id}/confirm`);
   },
 
   cancelPurchaseReceipt: (id: string): Promise<PurchaseReceiptResponse> => {
-    return api.post(`/purchase-receipts/${id}/cancel`);
+    return api.post(`/api/purchase-receipts/${id}/cancel`);
   },
 };

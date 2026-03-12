@@ -59,11 +59,11 @@ export const voucherApi = {
 
   // 获取科目余额
   getSubjectBalance: (params?: { periodId?: string }) => {
-    return api.get('/vouchers/subject-balance', { params });
+    return api.get('/api/vouchers/subject-balance', { params });
   },
 
   // 试算平衡表
   getTrialBalance: (params?: { periodId?: string }) => {
-    return api.get('/vouchers/trial-balance', { params });
+    return api.get('/api/vouchers/trial-balance', { params });
   },
 };

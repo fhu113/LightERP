@@ -11,19 +11,19 @@ export const purchaseInvoiceApi = {
   // ========== 采购发票 API ==========
 
   getPurchaseInvoices: (params?: QueryParams): Promise<PaginatedResult<PurchaseInvoiceResponse>> => {
-    return api.get('/purchase-invoices', { params });
+    return api.get('/api/purchase-invoices', { params });
   },
 
   getPurchaseInvoiceById: (id: string): Promise<PurchaseInvoiceResponse> => {
-    return api.get(`/purchase-invoices/${id}`);
+    return api.get(`/api/purchase-invoices/${id}`);
   },
 
   createPurchaseInvoice: (data: CreatePurchaseInvoiceDto): Promise<PurchaseInvoiceResponse> => {
-    return api.post('/purchase-invoices', data);
+    return api.post('/api/purchase-invoices', data);
   },
 
   updatePurchaseInvoice: (id: string, data: UpdatePurchaseInvoiceDto): Promise<PurchaseInvoiceResponse> => {
-    return api.put(`/purchase-invoices/${id}`, data);
+    return api.put(`/api/purchase-invoices/${id}`, data);
   },
 
   deletePurchaseInvoice: (id: string): Promise<void> => {
@@ -39,6 +39,6 @@ export const purchaseInvoiceApi = {
   },
 
   getReceiptsForInvoicing: (): Promise<any[]> => {
-    return api.get('/purchase-invoices/for-invoicing');
+    return api.get('/api/purchase-invoices/for-invoicing');
   },
 };
