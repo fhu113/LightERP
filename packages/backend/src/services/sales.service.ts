@@ -119,17 +119,17 @@ export class SalesService {
       deliveries.every(d => d.status === 'CONFIRMED') ? 'completed' :
       deliveries.some(d => d.status === 'CONFIRMED') ? 'partial' : 'draft';
 
-    // 计算开票状态
+    // 计算开票状态 - 支持 ISSUED, PAID, CONFIRMED 状态
     const totalInvoiceAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
     const invoiceStatus = invoices.length === 0 ? 'none' :
-      invoices.every(inv => inv.status === 'CONFIRMED') ? 'completed' :
-      invoices.some(inv => inv.status === 'CONFIRMED') ? 'partial' : 'draft';
+      invoices.every(inv => inv.status === 'ISSUED' || inv.status === 'PAID' || inv.status === 'CONFIRMED') ? 'completed' :
+      invoices.some(inv => inv.status === 'ISSUED' || inv.status === 'PAID' || inv.status === 'CONFIRMED') ? 'partial' : 'draft';
 
-    // 计算收款状态
+    // 计算收款状态 - 支持 PAID, CONFIRMED 状态
     const totalReceiptAmount = receipts.reduce((sum, r) => sum + r.amount, 0);
     const receiptStatus = receipts.length === 0 ? 'none' :
-      receipts.every(r => r.status === 'CONFIRMED') ? 'completed' :
-      receipts.some(r => r.status === 'CONFIRMED') ? 'partial' : 'draft';
+      receipts.every(r => r.status === 'PAID' || r.status === 'CONFIRMED') ? 'completed' :
+      receipts.some(r => r.status === 'PAID' || r.status === 'CONFIRMED') ? 'partial' : 'draft';
 
     return {
       orderId: order.id,
