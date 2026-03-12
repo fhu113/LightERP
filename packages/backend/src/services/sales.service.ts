@@ -112,7 +112,7 @@ export class SalesService {
       sum + d.items.reduce((s, i) => s + i.quantity, 0), 0
     );
     const deliveryStatus = deliveries.length === 0 ? 'none' :
-      deliveries.every(d => d.status === 'COMPLETED') ? 'completed' :
+      deliveries.every(d => d.status === 'CONFIRMED') ? 'completed' :
       deliveries.some(d => d.status === 'CONFIRMED') ? 'partial' : 'draft';
 
     // 计算开票状态
