@@ -4,5 +4,8 @@
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://backend-production-32da5.up.railway.app/api/$1" }
-  ]
+  ],
+  "env": {
+    "VITE_API_URL": "/api"
+  }
 }
