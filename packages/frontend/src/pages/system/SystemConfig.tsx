@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Select, Switch, Button, message, Typography, Divider, Spin } from 'antd';
+import { Card, Form, Select, Switch, Button, message, Typography, Spin, Row, Col } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
-import { systemConfigApi, CONFIG_KEYS, CONFIG_GROUPS, SystemConfig } from '../../services/system-config.api';
+import { systemConfigApi, CONFIG_GROUPS, SystemConfig } from '../../services/system-config.api';
 import { masterApi } from '../../services/master.api';
 import { Subject } from '../../types';
 
@@ -13,7 +13,7 @@ interface SubjectOption {
   name: string;
 }
 
-const SystemConfigPage: React.FC = () => {
+const AccountingEnginePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
@@ -59,7 +59,6 @@ const SystemConfigPage: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // 保存所有配置
       const promises = Object.entries(configValues).map(([key, value]) =>
         systemConfigApi.set(key, value)
       );
@@ -89,7 +88,7 @@ const SystemConfigPage: React.FC = () => {
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} style={{ margin: 0 }}>系统配置</Title>
+        <Title level={4} style={{ margin: 0 }}>会计引擎</Title>
         <Button
           type="primary"
           icon={<SaveOutlined />}
@@ -100,45 +99,56 @@ const SystemConfigPage: React.FC = () => {
         </Button>
       </div>
 
-      {CONFIG_GROUPS.map((group) => (
-        <Card key={group.title} title={group.title} style={{ marginBottom: 16 }}>
-          {group.items.map((item) => (
-            <div key={item.key}>
-              <Form.Item
-                label={item.label}
-                style={{ marginBottom: 12 }}
-              >
-                {item.type === 'boolean' ? (
-                  <Switch
-                    checked={configValues[item.key] === 'true'}
-                    onChange={(checked) => updateConfigValue(item.key, checked ? 'true' : 'false')}
-                    checkedChildren="启用"
-                    unCheckedChildren="禁用"
-                  />
-                ) : (
-                  <Select
-                    style={{ width: 300 }}
-                    placeholder="请选择科目"
-                    value={configValues[item.key] || undefined}
-                    onChange={(value) => updateConfigValue(item.key, value || '')}
-                    allowClear
-                    showSearch
-                    optionFilterProp="children"
-                  >
-                    {subjects.map((subject) => (
-                      <Select.Option key={subject.id} value={subject.id}>
-                        {subject.code} - {subject.name}
-                      </Select.Option>
-                    ))}
-                  </Select>
-                )}
-              </Form.Item>
-            </div>
-          ))}
-        </Card>
-      ))}
+      <Row gutter={[16, 16]}>
+        {CONFIG_GROUPS.map((group) => (
+          <Col xs={24} lg={12} xl={8} key={group.title}>
+            <Card
+              title={group.title}
+              bordered={false}
+              style={{ height: '100%' }}
+              styles={{ body: { padding: group.items.length > 2 ? 12 : 16 } }}
+            >
+              {group.items.map((item) => (
+                <Form.Item
+                  key={item.key}
+                  label={item.label}
+                  style={{ marginBottom: item.type === 'boolean' ? 8 : 12 }}
+                  labelCol={{ span: item.type === 'boolean' ? 24 : 10 }}
+                  wrapperCol={{ span: item.type === 'boolean' ? 24 : 14 }}
+                >
+                  {item.type === 'boolean' ? (
+                    <Switch
+                      checked={configValues[item.key] === 'true'}
+                      onChange={(checked) => updateConfigValue(item.key, checked ? 'true' : 'false')}
+                      checkedChildren="启用"
+                      unCheckedChildren="禁用"
+                    />
+                  ) : (
+                    <Select
+                      style={{ width: '100%' }}
+                      placeholder="请选择科目"
+                      value={configValues[item.key] || undefined}
+                      onChange={(value) => updateConfigValue(item.key, value || '')}
+                      allowClear
+                      showSearch
+                      optionFilterProp="children"
+                      size="small"
+                    >
+                      {subjects.map((subject) => (
+                        <Select.Option key={subject.id} value={subject.id}>
+                          {subject.code} - {subject.name}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  )}
+                </Form.Item>
+              ))}
+            </Card>
+          </Col>
+        ))}
+      </Row>
     </div>
   );
 };
 
-export default SystemConfigPage;
+export default AccountingEnginePage;

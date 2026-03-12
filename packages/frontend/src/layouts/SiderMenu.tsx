@@ -158,7 +158,7 @@ const SiderMenu: React.FC = () => {
         },
         {
           key: '/system/config',
-          label: '系统配置',
+          label: '会计引擎',
         },
       ],
     },

@@ -95,7 +95,7 @@ export const masterApi = {
   },
 
   getMaterialById: (id: string): Promise<Material> => {
-    return api.get(`/master/materials/${id}`);
+    return api.get(`/api/master/materials/${id}`);
   },
 
   createMaterial: (data: CreateMaterialDto): Promise<Material> => {
@@ -103,7 +103,7 @@ export const masterApi = {
   },
 
   updateMaterial: (id: string, data: UpdateMaterialDto): Promise<Material> => {
-    return api.put(`/master/materials/${id}`, data);
+    return api.put(`/api/master/materials/${id}`, data);
   },
 
   deleteMaterial: (id: string): Promise<void> => {
