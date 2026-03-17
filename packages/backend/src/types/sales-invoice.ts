@@ -11,6 +11,7 @@ export interface CreateSalesInvoiceDto {
 export interface UpdateSalesInvoiceDto {
   invoiceDate?: Date;
   status?: SalesInvoiceStatus;
+  voucherId?: string;
 }
 
 // 销售发票响应
@@ -26,6 +27,8 @@ export interface SalesInvoiceResponse {
   amount: number;
   taxAmount: number;
   status: SalesInvoiceStatus;
+  voucherId?: string | null;
+  voucherNo?: string | null;
   receipts: Array<{
     id: string;
     receiptNo: string;

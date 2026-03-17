@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, Input, InputNumber, Select, Popconfirm, Descriptions } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, Input, InputNumber, Select, Popconfirm, Descriptions, Badge, Tooltip, Row, Col } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined, FilterOutlined, ReloadOutlined, SearchOutlined, ClearOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { salesApi } from '../../services/sales.api';
 import { masterApi } from '../../services/master.api';
 import { SalesOrderResponse, SalesOrderStatus, CreateSalesOrderDto, SalesOrderItemDto, PaginatedResult, Customer, Material, OrderProcessStatus, ProcessStatus } from '../../types';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const SalesOrderList: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<SalesOrderResponse[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -27,6 +30,14 @@ const SalesOrderList: React.FC = () => {
     total: 0,
     totalPages: 0,
   });
+
+  // ========== 筛选状态 ==========
+  const [activeStatus, setActiveStatus] = useState<string>('ALL');
+  const [filterCustomerId, setFilterCustomerId] = useState<string | undefined>(undefined);
+  const [filterDateRange, setFilterDateRange] = useState<[any, any] | null>(null);
+  const [filterSearch, setFilterSearch] = useState<string>('');
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [showFilters, setShowFilters] = useState(false);
 
   // 流程状态颜色映射
   const processStatusColor: Record<ProcessStatus, string> = {
@@ -59,11 +70,21 @@ const SalesOrderList: React.FC = () => {
     CANCELLED: '已取消',
   };
 
+  const statusTabItems = [
+    { key: 'ALL', label: '全部', color: '#1677ff' },
+    { key: 'DRAFT', label: '草稿', color: '#d9d9d9' },
+    { key: 'CONFIRMED', label: '已确认', color: '#1677ff' },
+    { key: 'COMPLETED', label: '已完成', color: '#52c41a' },
+    { key: 'CANCELLED', label: '已取消', color: '#ff4d4f' },
+  ];
+
   const columns = [
     {
       title: '订单编号',
       dataIndex: 'orderNo',
       key: 'orderNo',
+      sorter: true,
+      render: (text: string) => <Text strong style={{ color: '#1677ff' }}>{text}</Text>,
     },
     {
       title: '客户',
@@ -75,6 +96,7 @@ const SalesOrderList: React.FC = () => {
       title: '订单日期',
       dataIndex: 'orderDate',
       key: 'orderDate',
+      sorter: true,
       render: (date: string) => new Date(date).toLocaleDateString('zh-CN'),
     },
     {
@@ -93,6 +115,7 @@ const SalesOrderList: React.FC = () => {
       title: '总金额',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
+      sorter: true,
       render: (amount: number) => `¥${amount.toFixed(2)}`,
     },
     {
@@ -136,7 +159,7 @@ const SalesOrderList: React.FC = () => {
               </Button>
             </>
           )}
-          {(record.status === 'DRAFT' || record.status === 'CONFIRMED') && record.status !== 'COMPLETED' && (
+          {(record.status === 'DRAFT' || record.status === 'CONFIRMED') && (
             <Button type="link" size="small" icon={<CloseOutlined />} onClick={() => handleCancel(record.id)}>
               取消
             </Button>
@@ -146,13 +169,18 @@ const SalesOrderList: React.FC = () => {
     },
   ];
 
-  const fetchOrders = async (page = 1, limit = 10) => {
+  const fetchOrders = useCallback(async (page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc') => {
     setLoading(true);
     try {
-      const result: PaginatedResult<SalesOrderResponse> = await salesApi.getSalesOrders({
-        page,
-        limit,
-      });
+      const params: any = { page, limit, sortBy, sortOrder };
+      if (filterSearch) params.search = filterSearch;
+      if (activeStatus !== 'ALL') params.status = activeStatus;
+      if (filterCustomerId) params.customerId = filterCustomerId;
+      if (filterDateRange && filterDateRange[0] && filterDateRange[1]) {
+        params.startDate = filterDateRange[0].format('YYYY-MM-DD');
+        params.endDate = filterDateRange[1].format('YYYY-MM-DD');
+      }
+      const result: PaginatedResult<SalesOrderResponse> = await salesApi.getSalesOrders(params);
       setOrders(result.data);
       setPagination(result.pagination);
     } catch (error) {
@@ -160,6 +188,15 @@ const SalesOrderList: React.FC = () => {
       message.error('获取销售订单列表失败');
     } finally {
       setLoading(false);
+    }
+  }, [filterSearch, activeStatus, filterCustomerId, filterDateRange]);
+
+  const fetchStatusCounts = async () => {
+    try {
+      const counts = await salesApi.getStatusCounts();
+      setStatusCounts(counts);
+    } catch (error) {
+      console.error('获取状态统计失败:', error);
     }
   };
 
@@ -181,6 +218,40 @@ const SalesOrderList: React.FC = () => {
     }
   };
 
+  // 筛选变化时重新加载第一页
+  useEffect(() => {
+    fetchOrders(1, pagination.limit);
+  }, [activeStatus, filterCustomerId, filterDateRange, fetchOrders]);
+
+  useEffect(() => {
+    fetchStatusCounts();
+    fetchCustomers();
+    fetchMaterials();
+  }, []);
+
+  // 计算当前有多少个活跃的高级筛选
+  const activeFilterCount = [filterCustomerId, filterDateRange, filterSearch].filter(Boolean).length;
+
+  // 重置所有筛选
+  const handleResetFilters = () => {
+    setActiveStatus('ALL');
+    setFilterCustomerId(undefined);
+    setFilterDateRange(null);
+    setFilterSearch('');
+  };
+
+  // 获取客户名称
+  const getCustomerName = (id: string) => {
+    const customer = customers.find(c => c.id === id);
+    return customer ? `${customer.code} - ${customer.name}` : id;
+  };
+
+  const handleTableChange = (pag: any, filters: any, sorter: any) => {
+    const sortBy = sorter.field || 'createdAt';
+    const sortOrder = sorter.order === 'ascend' ? 'asc' : 'desc';
+    fetchOrders(pag.current, pag.pageSize, sortBy, sortOrder);
+  };
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -200,9 +271,9 @@ const SalesOrderList: React.FC = () => {
       }
       setModalVisible(false);
       fetchOrders(pagination.page, pagination.limit);
+      fetchStatusCounts();
     } catch (error) {
       console.error('保存销售订单失败:', error);
-      // 错误信息已由表单验证或API拦截器处理
     } finally {
       setLoading(false);
     }
@@ -230,7 +301,6 @@ const SalesOrderList: React.FC = () => {
   const handleView = async (order: SalesOrderResponse) => {
     setViewingOrder(order);
     setViewModalVisible(true);
-    // 获取订单流程状态
     setProcessLoading(true);
     try {
       const status = await salesApi.getOrderProcessStatus(order.id);
@@ -249,6 +319,7 @@ const SalesOrderList: React.FC = () => {
       await salesApi.deleteSalesOrder(id);
       message.success('销售订单删除成功');
       fetchOrders(pagination.page, pagination.limit);
+      fetchStatusCounts();
     } catch (error) {
       console.error('删除销售订单失败:', error);
       message.error('删除销售订单失败');
@@ -263,6 +334,7 @@ const SalesOrderList: React.FC = () => {
       await salesApi.confirmOrder(id);
       message.success('订单确认成功');
       fetchOrders(pagination.page, pagination.limit);
+      fetchStatusCounts();
     } catch (error) {
       console.error('确认订单失败:', error);
       message.error('确认订单失败');
@@ -277,6 +349,7 @@ const SalesOrderList: React.FC = () => {
       await salesApi.cancelOrder(id);
       message.success('订单取消成功');
       fetchOrders(pagination.page, pagination.limit);
+      fetchStatusCounts();
     } catch (error) {
       console.error('取消订单失败:', error);
       message.error('取消订单失败');
@@ -301,29 +374,148 @@ const SalesOrderList: React.FC = () => {
     setItems(newItems);
   };
 
-  useEffect(() => {
-    fetchOrders();
-    fetchCustomers();
-    fetchMaterials();
-  }, []);
-
-  const handleTableChange = (pagination: any) => {
-    fetchOrders(pagination.current, pagination.pageSize);
-  };
-
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>销售订单管理</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-          setEditingOrder(null);
-          form.resetFields();
-          setItems([]);
-          setModalVisible(true);
-        }}>
-          新增销售订单
-        </Button>
+        <Space>
+          <Tooltip title="刷新">
+            <Button icon={<ReloadOutlined />} onClick={() => { fetchOrders(pagination.page, pagination.limit); fetchStatusCounts(); }} />
+          </Tooltip>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+            setEditingOrder(null);
+            form.resetFields();
+            setItems([]);
+            setModalVisible(true);
+          }}>
+            新增销售订单
+          </Button>
+        </Space>
       </div>
+
+      {/* ========== 状态快捷标签页 ========== */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {statusTabItems.map(tab => {
+          const count = statusCounts[tab.key] || 0;
+          const isActive = activeStatus === tab.key;
+          return (
+            <Button
+              key={tab.key}
+              type={isActive ? 'primary' : 'default'}
+              size="middle"
+              onClick={() => setActiveStatus(tab.key)}
+              style={{
+                borderRadius: 20,
+                ...(isActive ? {} : { borderColor: '#d9d9d9' }),
+              }}
+            >
+              {tab.label}
+              <Badge
+                count={count}
+                style={{
+                  marginLeft: 6,
+                  backgroundColor: isActive ? '#fff' : tab.color,
+                  color: isActive ? tab.color : '#fff',
+                  boxShadow: 'none',
+                  fontSize: 11,
+                }}
+                overflowCount={999}
+                showZero
+              />
+            </Button>
+          );
+        })}
+
+        <div style={{ flex: 1 }} />
+
+        {/* 高级筛选切换按钮 */}
+        <Button
+          icon={<FilterOutlined />}
+          onClick={() => setShowFilters(!showFilters)}
+          type={showFilters || activeFilterCount > 0 ? 'primary' : 'default'}
+          ghost={showFilters || activeFilterCount > 0}
+        >
+          高级筛选 {activeFilterCount > 0 && `(${activeFilterCount})`}
+        </Button>
+
+        {/* 重置按钮 */}
+        {(activeStatus !== 'ALL' || activeFilterCount > 0) && (
+          <Button icon={<ClearOutlined />} onClick={handleResetFilters} danger type="text">
+            重置
+          </Button>
+        )}
+      </div>
+
+      {/* ========== 高级筛选面板 ========== */}
+      {showFilters && (
+        <Card size="small" style={{ marginBottom: 16, background: '#fafafa' }}>
+          <Row gutter={[16, 12]} align="bottom">
+            <Col xs={24} sm={12} md={6}>
+              <div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>客户</Text></div>
+              <Select
+                placeholder="全部客户"
+                value={filterCustomerId}
+                onChange={(v) => setFilterCustomerId(v)}
+                allowClear
+                showSearch
+                optionFilterProp="children"
+                style={{ width: '100%' }}
+              >
+                {customers.map(c => (
+                  <Option key={c.id} value={c.id}>{c.code} - {c.name}</Option>
+                ))}
+              </Select>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>创建时间</Text></div>
+              <RangePicker
+                value={filterDateRange as any}
+                onChange={(dates) => setFilterDateRange(dates as any)}
+                style={{ width: '100%' }}
+                placeholder={['开始日期', '结束日期']}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <div style={{ marginBottom: 4 }}><Text type="secondary" style={{ fontSize: 12 }}>订单号 / 客户名</Text></div>
+              <Input.Search
+                placeholder="输入搜索..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                onSearch={() => fetchOrders(1, pagination.limit)}
+                allowClear
+                enterButton={<SearchOutlined />}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={4}>
+              <Button block onClick={() => fetchOrders(1, pagination.limit)} type="primary" icon={<SearchOutlined />}>
+                查询
+              </Button>
+            </Col>
+          </Row>
+        </Card>
+      )}
+
+      {/* ========== 已激活筛选标签 ========== */}
+      {activeFilterCount > 0 && (
+        <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>当前筛选：</Text>
+          {filterCustomerId && (
+            <Tag closable onClose={() => setFilterCustomerId(undefined)} color="blue">
+              客户: {getCustomerName(filterCustomerId)}
+            </Tag>
+          )}
+          {filterDateRange && filterDateRange[0] && filterDateRange[1] && (
+            <Tag closable onClose={() => setFilterDateRange(null)} color="green">
+              时间: {filterDateRange[0].format('YYYY-MM-DD')} ~ {filterDateRange[1].format('YYYY-MM-DD')}
+            </Tag>
+          )}
+          {filterSearch && (
+            <Tag closable onClose={() => { setFilterSearch(''); }} color="orange">
+              搜索: {filterSearch}
+            </Tag>
+          )}
+        </div>
+      )}
 
       <Card>
         <Table
@@ -460,6 +652,14 @@ const SalesOrderList: React.FC = () => {
         open={viewModalVisible}
         onCancel={() => setViewModalVisible(false)}
         footer={[
+          viewingOrder?.status === 'DRAFT' && (
+            <Button key="confirm" type="primary" icon={<CheckOutlined />} onClick={() => {
+              handleConfirm(viewingOrder.id);
+              setViewModalVisible(false);
+            }}>
+              确认订单
+            </Button>
+          ),
           <Button key="close" onClick={() => setViewModalVisible(false)}>
             关闭
           </Button>
@@ -525,40 +725,102 @@ const SalesOrderList: React.FC = () => {
             ) : orderProcessStatus ? (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                 {/* 发货状态 */}
-                <Card size="small" title="发货状态">
-                  <Tag color={processStatusColor[orderProcessStatus.delivery.status]}>
-                    {processStatusText[orderProcessStatus.delivery.status]}
-                  </Tag>
+                <Card size="small" title="发货状态" style={{ border: '1px solid #f0f0f0' }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <Tag color={processStatusColor[orderProcessStatus.delivery.status]}>
+                      {processStatusText[orderProcessStatus.delivery.status]}
+                    </Tag>
+                  </div>
                   {orderProcessStatus.delivery.count > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div>发货单数量: {orderProcessStatus.delivery.count}</div>
-                      <div>发货数量: {orderProcessStatus.delivery.totalQuantity}</div>
+                    <div style={{ fontSize: 13 }}>
+                      {orderProcessStatus.delivery.items.map(item => (
+                        <div key={item.id} style={{ marginBottom: 4, padding: '4px 0', borderBottom: '1px dashed #f0f0f0' }}>
+                          <Text type="secondary">{item.deliveryNo}</Text>
+                          {item.voucherNo && (
+                            <div style={{ marginTop: 2 }}>
+                              <Badge status="processing" text="已生凭证" style={{ fontSize: 11 }} />
+                              <Button
+                                type="link"
+                                size="small"
+                                style={{ padding: 0, fontSize: 12, marginLeft: 8 }}
+                                onClick={() => {
+                                  navigate(`/finance/voucher-list?voucherId=${item.voucherId}`);
+                                }}
+                              >
+                                {item.voucherNo}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </Card>
 
                 {/* 开票状态 */}
-                <Card size="small" title="开票状态">
-                  <Tag color={processStatusColor[orderProcessStatus.invoice.status]}>
-                    {processStatusText[orderProcessStatus.invoice.status]}
-                  </Tag>
+                <Card size="small" title="开票状态" style={{ border: '1px solid #f0f0f0' }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <Tag color={processStatusColor[orderProcessStatus.invoice.status]}>
+                      {processStatusText[orderProcessStatus.invoice.status]}
+                    </Tag>
+                  </div>
                   {orderProcessStatus.invoice.count > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div>发票数量: {orderProcessStatus.invoice.count}</div>
-                      <div>发票金额: ¥{orderProcessStatus.invoice.totalAmount.toFixed(2)}</div>
+                    <div style={{ fontSize: 13 }}>
+                      {orderProcessStatus.invoice.items.map(item => (
+                        <div key={item.id} style={{ marginBottom: 4, padding: '4px 0', borderBottom: '1px dashed #f0f0f0' }}>
+                          <Text type="secondary">{item.invoiceNo}</Text>
+                          <div style={{ fontSize: 12 }}>金额: ¥{item.amount.toFixed(2)}</div>
+                          {item.voucherNo && (
+                            <div style={{ marginTop: 2 }}>
+                              <Badge status="processing" />
+                              <Button
+                                type="link"
+                                size="small"
+                                style={{ padding: 0, fontSize: 12 }}
+                                onClick={() => {
+                                  window.location.href = `/finance/voucher-list?voucherId=${item.voucherId}`;
+                                }}
+                              >
+                                凭证: {item.voucherNo}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </Card>
 
                 {/* 收款状态 */}
-                <Card size="small" title="收款状态">
-                  <Tag color={processStatusColor[orderProcessStatus.receipt.status]}>
-                    {processStatusText[orderProcessStatus.receipt.status]}
-                  </Tag>
+                <Card size="small" title="收款状态" style={{ border: '1px solid #f0f0f0' }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <Tag color={processStatusColor[orderProcessStatus.receipt.status]}>
+                      {processStatusText[orderProcessStatus.receipt.status]}
+                    </Tag>
+                  </div>
                   {orderProcessStatus.receipt.count > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <div>收款单数量: {orderProcessStatus.receipt.count}</div>
-                      <div>收款金额: ¥{orderProcessStatus.receipt.totalAmount.toFixed(2)}</div>
+                    <div style={{ fontSize: 13 }}>
+                      {orderProcessStatus.receipt.items.map(item => (
+                        <div key={item.id} style={{ marginBottom: 4, padding: '4px 0', borderBottom: '1px dashed #f0f0f0' }}>
+                          <Text type="secondary">{item.receiptNo}</Text>
+                          <div style={{ fontSize: 12 }}>金额: ¥{item.amount.toFixed(2)}</div>
+                          {item.voucherNo && (
+                            <div style={{ marginTop: 2 }}>
+                              <Badge status="processing" />
+                              <Button
+                                type="link"
+                                size="small"
+                                style={{ padding: 0, fontSize: 12 }}
+                                onClick={() => {
+                                  window.location.href = `/finance/voucher-list?voucherId=${item.voucherId}`;
+                                }}
+                              >
+                                凭证: {item.voucherNo}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </Card>

@@ -81,6 +81,19 @@ export class VoucherController {
     },
   ];
 
+  // 冲销凭证
+  static reverseVoucher = [
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { id } = req.params;
+        const voucher = await voucherService.reverseVoucher(id);
+        res.json(voucher);
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+
   // 获取科目余额
   static getSubjectBalance = [
     async (req: Request, res: Response, next: NextFunction) => {

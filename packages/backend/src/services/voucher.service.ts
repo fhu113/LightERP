@@ -1,4 +1,7 @@
+import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+
+type TransactionClient = Prisma.TransactionClient | PrismaClient;
 import { AppError } from '../middleware/errorHandler';
 import {
   VoucherResponse,
@@ -8,14 +11,14 @@ import {
   UpdateVoucherDto,
 } from '../types/voucher';
 import { PaginatedResult, QueryParams } from '../types';
-import { getSubjectIdFromConfig, isAutoGenerateVoucherEnabled, CONFIG_KEYS } from './system-config.service';
+import { getSubjectIdFromConfig, isAutoGenerateVoucherEnabled, isAutoPostEnabled, CONFIG_KEYS } from './system-config.service';
 
 // 生成凭证编号: V-YYYYMMDD-0001
-async function generateVoucherNo(): Promise<string> {
+async function generateVoucherNo(tx: TransactionClient = prisma): Promise<string> {
   const today = new Date();
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
 
-  const count = await prisma.voucher.count({
+  const count = await tx.voucher.count({
     where: {
       voucherNo: {
         startsWith: `V-${dateStr}`,
@@ -139,7 +142,7 @@ export async function getVoucherById(id: string): Promise<VoucherResponse | null
 }
 
 // 创建凭证
-export async function createVoucher(data: CreateVoucherDto): Promise<VoucherResponse> {
+export async function createVoucher(data: CreateVoucherDto, tx: TransactionClient = prisma): Promise<VoucherResponse> {
   // 验证借贷平衡
   const totalDebit = data.items.reduce((sum, item) => sum + item.debitAmount, 0);
   const totalCredit = data.items.reduce((sum, item) => sum + item.creditAmount, 0);
@@ -156,9 +159,9 @@ export async function createVoucher(data: CreateVoucherDto): Promise<VoucherResp
     voucherDate = data.voucherDate || new Date();
   }
 
-  const voucher = await prisma.voucher.create({
+  const voucher = await tx.voucher.create({
     data: {
-      voucherNo: await generateVoucherNo(),
+      voucherNo: await generateVoucherNo(tx),
       voucherDate,
       voucherType: data.voucherType || 'GENERAL',
       summary: data.summary,
@@ -271,8 +274,8 @@ export async function deleteVoucher(id: string): Promise<void> {
 }
 
 // 过账凭证
-export async function postVoucher(id: string): Promise<VoucherResponse> {
-  const voucher = await prisma.voucher.findUnique({
+export async function postVoucher(id: string, tx: TransactionClient = prisma): Promise<VoucherResponse> {
+  const voucher = await tx.voucher.findUnique({
     where: { id },
   });
 
@@ -285,7 +288,7 @@ export async function postVoucher(id: string): Promise<VoucherResponse> {
   }
 
   // 验证借贷平衡
-  const items = await prisma.voucherItem.findMany({
+  const items = await tx.voucherItem.findMany({
     where: { voucherId: id },
   });
 
@@ -296,7 +299,7 @@ export async function postVoucher(id: string): Promise<VoucherResponse> {
     throw new AppError('借贷金额不平衡，无法过账', 400);
   }
 
-  const updated = await prisma.voucher.update({
+  const updated = await tx.voucher.update({
     where: { id },
     data: { status: 'POSTED' },
     include: {
@@ -336,8 +339,8 @@ export async function postVoucher(id: string): Promise<VoucherResponse> {
 // ============================================
 
 // 获取常用科目ID的辅助函数
-async function getSubjectIdByCode(code: string): Promise<string | null> {
-  const subject = await prisma.accountingSubject.findUnique({
+async function getSubjectIdByCode(code: string, tx: TransactionClient = prisma): Promise<string | null> {
+  const subject = await tx.accountingSubject.findUnique({
     where: { code },
   });
   return subject?.id || null;
@@ -347,16 +350,17 @@ async function getSubjectIdByCode(code: string): Promise<string | null> {
 // 借：主营业务成本（配置）
 // 贷：库存商品（配置）
 export async function generateDeliveryVoucher(
-  deliveryId: string
+  deliveryId: string,
+  tx: TransactionClient = prisma
 ): Promise<VoucherResponse | null> {
   // 检查是否启用自动生成凭证
-  const isEnabled = await isAutoGenerateVoucherEnabled();
+  const isEnabled = await isAutoGenerateVoucherEnabled(tx);
   if (!isEnabled) {
     console.log('自动生成凭证未启用');
     return null;
   }
 
-  const delivery = await prisma.delivery.findUnique({
+  const delivery = await tx.delivery.findUnique({
     where: { id: deliveryId },
     include: {
       order: {
@@ -376,8 +380,8 @@ export async function generateDeliveryVoucher(
   }
 
   // 获取配置科目ID
-  const costSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_DELIVERY_COST_SUBJECT_ID);
-  const inventorySubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_DELIVERY_INVENTORY_SUBJECT_ID);
+  const costSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_DELIVERY_COST_SUBJECT_ID, tx);
+  const inventorySubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_DELIVERY_INVENTORY_SUBJECT_ID, tx);
 
   if (!costSubjectId || !inventorySubjectId) {
     console.warn('发货凭证科目未配置，跳过生成凭证');
@@ -416,7 +420,13 @@ export async function generateDeliveryVoucher(
         description: '贷：库存商品',
       },
     ],
-  });
+  }, tx);
+
+  // 检查是否需要自动过账
+  const isAutoPost = await isAutoPostEnabled(CONFIG_KEYS.OTC_DELIVERY_AUTO_POST, tx);
+  if (isAutoPost && voucher) {
+    await postVoucher(voucher.id, tx);
+  }
 
   return voucher;
 }
@@ -426,9 +436,17 @@ export async function generateDeliveryVoucher(
 // 贷：主营业务收入 金额
 // 贷：应交税费-销项税额 税额
 export async function generateSalesInvoiceVoucher(
-  invoiceId: string
+  invoiceId: string,
+  tx: TransactionClient = prisma
 ): Promise<VoucherResponse | null> {
-  const invoice = await prisma.salesInvoice.findUnique({
+  // 检查是否启用自动生成凭证
+  const isEnabled = await isAutoGenerateVoucherEnabled(tx);
+  if (!isEnabled) {
+    console.log('自动生成凭证未启用');
+    return null;
+  }
+
+  const invoice = await tx.salesInvoice.findUnique({
     where: { id: invoiceId },
     include: {
       customer: true,
@@ -440,13 +458,13 @@ export async function generateSalesInvoiceVoucher(
     throw new AppError('销售发票不存在', 404);
   }
 
-  // 获取科目ID
-  const receivableSubjectId = await getSubjectIdByCode('1122'); // 应收账款
-  const revenueSubjectId = await getSubjectIdByCode('6001'); // 主营业务收入
-  const taxSubjectId = await getSubjectIdByCode('2221'); // 应交税费
+  // 获取配置科目ID
+  const receivableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_INVOICE_RECEIVABLE_SUBJECT_ID, tx);
+  const revenueSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_INVOICE_REVENUE_SUBJECT_ID, tx);
+  const taxSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_INVOICE_TAX_SUBJECT_ID, tx);
 
   if (!receivableSubjectId || !revenueSubjectId || !taxSubjectId) {
-    console.warn('部分科目不存在，跳过生成凭证');
+    console.warn('销售发票凭证科目未完整配置，跳过生成凭证');
     return null;
   }
 
@@ -480,7 +498,13 @@ export async function generateSalesInvoiceVoucher(
         description: '贷：应交税费-销项税额',
       },
     ],
-  });
+  }, tx);
+
+  // 检查是否需要自动过账
+  const isAutoPostInvoice = await isAutoPostEnabled(CONFIG_KEYS.OTC_INVOICE_AUTO_POST, tx);
+  if (isAutoPostInvoice && voucher) {
+    await postVoucher(voucher.id, tx);
+  }
 
   return voucher;
 }
@@ -490,9 +514,10 @@ export async function generateSalesInvoiceVoucher(
 // 借：应交税费-进项税额 税额
 // 贷：应付账款（供应商） 金额+税额
 export async function generatePurchaseInvoiceVoucher(
-  invoiceId: string
+  invoiceId: string,
+  tx: TransactionClient = prisma
 ): Promise<VoucherResponse | null> {
-  const invoice = await prisma.purchaseInvoice.findUnique({
+  const invoice = await tx.purchaseInvoice.findUnique({
     where: { id: invoiceId },
     include: {
       supplier: true,
@@ -503,13 +528,13 @@ export async function generatePurchaseInvoiceVoucher(
     throw new AppError('采购发票不存在', 404);
   }
 
-  // 获取科目ID
-  const inventorySubjectId = await getSubjectIdByCode('1405'); // 库存商品
-  const taxSubjectId = await getSubjectIdByCode('2221'); // 应交税费
-  const payableSubjectId = await getSubjectIdByCode('2202'); // 应付账款
+  // 获取配置科目ID
+  const estimatedPayableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.PTP_INVOICE_ESTIMATED_PAYABLE_SUBJECT_ID, tx);
+  const taxPayableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.PTP_INVOICE_TAX_PAYABLE_SUBJECT_ID, tx);
+  const payableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.PTP_INVOICE_PAYABLE_SUBJECT_ID, tx);
 
-  if (!inventorySubjectId || !taxSubjectId || !payableSubjectId) {
-    console.warn('部分科目不存在，跳过生成凭证');
+  if (!estimatedPayableSubjectId || !taxPayableSubjectId || !payableSubjectId) {
+    console.warn('采购发票凭证科目未配置，跳过生成凭证');
     return null;
   }
 
@@ -525,16 +550,16 @@ export async function generatePurchaseInvoiceVoucher(
     summary,
     items: [
       {
-        subjectId: inventorySubjectId,
+        subjectId: estimatedPayableSubjectId,
         debitAmount: amount,
         creditAmount: 0,
-        description: '借：库存商品',
+        description: '借：应付暂估',
       },
       {
-        subjectId: taxSubjectId,
+        subjectId: taxPayableSubjectId,
         debitAmount: taxAmount,
         creditAmount: 0,
-        description: '借：应交税费-进项税额',
+        description: '借：应付账款-进项税',
       },
       {
         subjectId: payableSubjectId,
@@ -543,7 +568,13 @@ export async function generatePurchaseInvoiceVoucher(
         description: `贷：应付账款 ${supplierName}`,
       },
     ],
-  });
+  }, tx);
+
+  // 检查是否需要自动过账
+  const isAutoPostPurchaseInvoice = await isAutoPostEnabled(CONFIG_KEYS.PTP_INVOICE_AUTO_POST, tx);
+  if (isAutoPostPurchaseInvoice && voucher) {
+    await postVoucher(voucher.id, tx);
+  }
 
   return voucher;
 }
@@ -553,9 +584,17 @@ export async function generatePurchaseInvoiceVoucher(
 // 贷：应收账款（客户）
 export async function generateReceiptVoucher(
   receiptId: string,
-  paymentMethod: string = 'BANK_TRANSFER'
+  paymentMethod: string = 'BANK_TRANSFER',
+  tx: TransactionClient = prisma
 ): Promise<VoucherResponse | null> {
-  const receipt = await prisma.receipt.findUnique({
+  // 检查是否启用自动生成凭证
+  const isEnabled = await isAutoGenerateVoucherEnabled(tx);
+  if (!isEnabled) {
+    console.log('自动生成凭证未启用');
+    return null;
+  }
+
+  const receipt = await tx.receipt.findUnique({
     where: { id: receiptId },
     include: {
       customer: true,
@@ -567,13 +606,11 @@ export async function generateReceiptVoucher(
     throw new AppError('收款单不存在', 404);
   }
 
-  // 根据付款方式选择科目
-  const cashSubjectId = await getSubjectIdByCode('10010010'); // 库存现金
-  const bankSubjectId = await getSubjectIdByCode('1002'); // 银行存款
-  const receivableSubjectId = await getSubjectIdByCode('1122'); // 应收账款
+  const receivableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_RECEIPT_RECEIVABLE_SUBJECT_ID, tx);
+  const cashSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.OTC_RECEIPT_CASH_SUBJECT_ID, tx);
 
-  if (!cashSubjectId || !bankSubjectId || !receivableSubjectId) {
-    console.warn('部分科目不存在，跳过生成凭证');
+  if (!receivableSubjectId || !cashSubjectId) {
+    console.warn('收款单凭证科目未完整配置，跳过生成凭证');
     return null;
   }
 
@@ -588,7 +625,7 @@ export async function generateReceiptVoucher(
     summary,
     items: [
       {
-        subjectId: paymentMethod === 'CASH' ? cashSubjectId : bankSubjectId,
+        subjectId: cashSubjectId,
         debitAmount: amount,
         creditAmount: 0,
         description: `借：${paymentMethodText}`,
@@ -600,7 +637,13 @@ export async function generateReceiptVoucher(
         description: `贷：应收账款 ${customerName}`,
       },
     ],
-  });
+  }, tx);
+
+  // 检查是否需要自动过账
+  const isAutoPostReceipt = await isAutoPostEnabled(CONFIG_KEYS.OTC_RECEIPT_AUTO_POST, tx);
+  if (isAutoPostReceipt && voucher) {
+    await postVoucher(voucher.id, tx);
+  }
 
   return voucher;
 }
@@ -610,9 +653,10 @@ export async function generateReceiptVoucher(
 // 贷：银行存款/库存现金
 export async function generatePaymentVoucher(
   paymentId: string,
-  paymentMethod: string = 'BANK_TRANSFER'
+  paymentMethod: string = 'BANK_TRANSFER',
+  tx: TransactionClient = prisma
 ): Promise<VoucherResponse | null> {
-  const payment = await prisma.payment.findUnique({
+  const payment = await tx.payment.findUnique({
     where: { id: paymentId },
     include: {
       supplier: true,
@@ -625,9 +669,9 @@ export async function generatePaymentVoucher(
   }
 
   // 根据付款方式选择科目
-  const cashSubjectId = await getSubjectIdByCode('10010010'); // 库存现金
-  const bankSubjectId = await getSubjectIdByCode('1002'); // 银行存款
-  const payableSubjectId = await getSubjectIdByCode('2202'); // 应付账款
+  const cashSubjectId = await getSubjectIdByCode('10010010', tx); // 库存现金
+  const bankSubjectId = await getSubjectIdByCode('1002', tx); // 银行存款
+  const payableSubjectId = await getSubjectIdByCode('2202', tx); // 应付账款
 
   if (!cashSubjectId || !bankSubjectId || !payableSubjectId) {
     console.warn('部分科目不存在，跳过生成凭证');
@@ -657,7 +701,168 @@ export async function generatePaymentVoucher(
         description: `贷：${paymentMethodText}`,
       },
     ],
+  }, tx);
+
+  // 检查是否需要自动过账
+  const isAutoPostPayment = await isAutoPostEnabled(CONFIG_KEYS.PTP_PAYMENT_AUTO_POST, tx);
+  if (isAutoPostPayment && voucher) {
+    await postVoucher(voucher.id, tx);
+  }
+
+  return voucher;
+}
+
+// 采购收货确认时生成凭证
+// 借：库存商品 金额
+// 贷：应付暂估 金额
+export async function generatePurchaseReceiptVoucher(
+  receiptId: string,
+  tx: TransactionClient = prisma
+): Promise<VoucherResponse | null> {
+  // 检查是否启用自动生成凭证
+  const isEnabled = await isAutoGenerateVoucherEnabled(tx);
+  if (!isEnabled) {
+    console.log('自动生成凭证未启用');
+    return null;
+  }
+
+  const receipt = await tx.purchaseReceipt.findUnique({
+    where: { id: receiptId },
+    include: {
+      order: {
+        include: {
+          supplier: true
+        }
+      },
+      items: {
+        include: {
+          orderItem: {
+            include: {
+              material: true
+            }
+          }
+        }
+      }
+    }
   });
+
+  if (!receipt) {
+    throw new AppError('采购收货单不存在', 404);
+  }
+
+  // 获取配置科目ID
+  const inventorySubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.PTP_RECEIPT_INVENTORY_SUBJECT_ID, tx);
+  const estimatedPayableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.PTP_RECEIPT_ESTIMATED_PAYABLE_SUBJECT_ID, tx);
+
+  if (!inventorySubjectId || !estimatedPayableSubjectId) {
+    console.warn('采购收货凭证科目未配置，跳过生成凭证');
+    return null;
+  }
+
+  // 计算总金额（不含税）
+  let totalAmount = 0;
+  for (const item of receipt.items) {
+    totalAmount += (item.orderItem.unitPrice || 0) * item.quantity;
+  }
+
+  if (totalAmount <= 0) {
+    console.warn('金额为0，跳过生成凭证');
+    return null;
+  }
+
+  const supplierName = receipt.order?.supplier?.name || '供应商';
+  const summary = `采购收货 ${receipt.receiptNo} - ${supplierName}`;
+
+  const voucher = await createVoucher({
+    voucherType: 'GENERAL',
+    summary,
+    items: [
+      {
+        subjectId: inventorySubjectId,
+        debitAmount: totalAmount,
+        creditAmount: 0,
+        description: '借：库存商品',
+      },
+      {
+        subjectId: estimatedPayableSubjectId,
+        debitAmount: 0,
+        creditAmount: totalAmount,
+        description: `贷：应付暂估 ${supplierName}`,
+      },
+    ],
+  }, tx);
+
+  // 检查是否需要自动过账
+  const isAutoPost = await isAutoPostEnabled(CONFIG_KEYS.PTP_RECEIPT_AUTO_POST, tx);
+  if (isAutoPost && voucher) {
+    await postVoucher(voucher.id, tx);
+  }
+
+  return voucher;
+}
+
+// 库存调整生成凭证
+// 调增：借：库存商品，贷：应付账款
+// 调减：借：应付账款，贷：库存商品（暂按同样逻辑）
+export async function generateInventoryAdjustmentVoucher(
+  materialId: string,
+  adjustmentType: 'INCREASE' | 'DECREASE',
+  quantity: number,
+  unitCost: number,
+  referenceNo: string,
+  tx: TransactionClient = prisma
+): Promise<VoucherResponse | null> {
+  // 检查是否启用自动生成凭证
+  const isEnabled = await isAutoGenerateVoucherEnabled(tx);
+  if (!isEnabled) {
+    console.log('自动生成凭证未启用');
+    return null;
+  }
+
+  const material = await tx.material.findUnique({
+    where: { id: materialId },
+  });
+
+  if (!material) {
+    throw new Error('物料不存在');
+  }
+
+  // 获取配置科目ID
+  const inventorySubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.INVENTORY_ADJUSTMENT_INVENTORY_SUBJECT_ID, tx);
+  const payableSubjectId = await getSubjectIdFromConfig(CONFIG_KEYS.INVENTORY_ADJUSTMENT_PAYABLE_SUBJECT_ID, tx);
+
+  if (!inventorySubjectId || !payableSubjectId) {
+    console.warn('库存调整凭证科目未配置，跳过生成凭证');
+    return null;
+  }
+
+  const amount = quantity * unitCost;
+  const adjustmentTypeText = adjustmentType === 'INCREASE' ? '调增' : '调减';
+  const summary = `库存调整 ${referenceNo} - ${material.name} - ${adjustmentTypeText}`;
+
+  const voucher = await createVoucher({
+    voucherType: 'GENERAL',
+    summary,
+    items: [
+      {
+        subjectId: inventorySubjectId,
+        debitAmount: adjustmentType === 'INCREASE' ? amount : 0,
+        creditAmount: adjustmentType === 'DECREASE' ? amount : 0,
+        description: adjustmentType === 'INCREASE' ? '借：库存商品' : '贷：库存商品',
+      },
+      {
+        subjectId: payableSubjectId,
+        debitAmount: adjustmentType === 'DECREASE' ? amount : 0,
+        creditAmount: adjustmentType === 'INCREASE' ? amount : 0,
+        description: adjustmentType === 'INCREASE' ? '贷：应付账款' : '借：应付账款',
+      },
+    ],
+  }, tx);
+
+  // 库存调整默认自动过账
+  if (voucher) {
+    await postVoucher(voucher.id, tx);
+  }
 
   return voucher;
 }
@@ -730,4 +935,53 @@ export async function getSubjectBalance(_params?: { periodId?: string }): Promis
   }
 
   return Array.from(balanceMap.values());
+}
+
+// 冲销凭证 - 红字冲销法
+export async function reverseVoucher(originalVoucherId: string): Promise<VoucherResponse | null> {
+  const originalVoucher = await prisma.voucher.findUnique({
+    where: { id: originalVoucherId },
+    include: {
+      items: {
+        include: {
+          subject: true
+        }
+      }
+    }
+  });
+
+  if (!originalVoucher) {
+    throw new AppError('原凭证不存在', 404);
+  }
+
+  // 已过账的凭证才能冲销
+  if (originalVoucher.status !== 'POSTED') {
+    throw new AppError('只有已过账的凭证才能冲销', 400);
+  }
+
+  // 检查是否已被冲销过
+  if (originalVoucher.summary?.includes('(冲销)')) {
+    throw new AppError('该凭证已被冲销', 400);
+  }
+
+  // 创建冲销凭证（红字凭证）- 借贷方向相反
+  const reverseItems = originalVoucher.items.map(item => ({
+    subjectId: item.subjectId,
+    debitAmount: item.creditAmount, // 借贷反向
+    creditAmount: item.debitAmount,
+    description: `冲销: ${item.description || ''}`
+  }));
+
+  const reverseVoucher = await createVoucher({
+    voucherType: 'REVERSAL',
+    summary: `${originalVoucher.summary} (冲销)`,
+    voucherDate: new Date(),
+    items: reverseItems
+  });
+
+  // 过账冲销凭证
+  await postVoucher(reverseVoucher.id);
+
+  // 返回更新后的凭证（包含POSTED状态）
+  return await getVoucherById(reverseVoucher.id);
 }

@@ -91,4 +91,15 @@ export class PurchaseController {
       }
     }
   ];
+
+  static getStatusCounts = [
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const counts = await purchaseService.getStatusCounts();
+        res.json(counts);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
 }

@@ -1,16 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, InputNumber, Select, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, InputNumber, Select, Popconfirm, Badge, Tabs, Row, Col, Input } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import { salesApi } from '../../services/sales.api';
 import { masterApi } from '../../services/master.api';
 import { ReceiptResponse, ReceiptStatus, PaymentMethod, CreateReceiptDto, PaginatedResult, Customer, SalesInvoiceResponse } from '../../types';
+import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { Option } = Select;
+const { RangePicker } = DatePicker;
+
+// 状态标签颜色映射
+const statusColor: Record<ReceiptStatus, string> = {
+  PENDING: 'default',
+  PAID: 'success',
+  CANCELLED: 'error',
+};
+
+// 状态标签文本映射
+const statusText: Record<ReceiptStatus, string> = {
+  PENDING: '待处理',
+  PAID: '已收款',
+  CANCELLED: '已取消',
+};
+
+// 支付方式文本映射
+const paymentMethodText: Record<PaymentMethod, string> = {
+  CASH: '现金',
+  BANK_TRANSFER: '银行转账',
+  CHECK: '支票',
+  CREDIT_CARD: '信用卡',
+};
+
+const TAB_ITEMS = [
+  { key: 'ALL', label: '全部' },
+  { key: 'PENDING', label: '待处理' },
+  { key: 'PAID', label: '已收款' },
+  { key: 'CANCELLED', label: '已取消' },
+];
 
 const ReceiptList: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [receipts, setReceipts] = useState<ReceiptResponse[]>([]);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [modalVisible, setModalVisible] = useState(false);
   const [editingReceipt, setEditingReceipt] = useState<ReceiptResponse | null>(null);
   const [viewModalVisible, setViewModalVisible] = useState(false);
@@ -18,6 +50,7 @@ const ReceiptList: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<SalesInvoiceResponse[]>([]);
   const [form] = Form.useForm();
+  
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -25,33 +58,18 @@ const ReceiptList: React.FC = () => {
     totalPages: 0,
   });
 
-  // 状态标签颜色映射
-  const statusColor: Record<ReceiptStatus, string> = {
-    PENDING: 'default',
-    PAID: 'success',
-    CANCELLED: 'error',
-  };
-
-  // 状态标签文本映射
-  const statusText: Record<ReceiptStatus, string> = {
-    PENDING: '待处理',
-    PAID: '已收款',
-    CANCELLED: '已取消',
-  };
-
-  // 支付方式文本映射
-  const paymentMethodText: Record<PaymentMethod, string> = {
-    CASH: '现金',
-    BANK_TRANSFER: '银行转账',
-    CHECK: '支票',
-    CREDIT_CARD: '信用卡',
-  };
+  // 筛选与排序状态
+  const [activeTab, setActiveTab] = useState('ALL');
+  const [searchText, setSearchText] = useState('');
+  const [filters, setFilters] = useState<any>({});
+  const [sortParam, setSortParam] = useState({ sortBy: 'createdAt', sortOrder: 'desc' });
 
   const columns = [
     {
       title: '收款单号',
       dataIndex: 'receiptNo',
       key: 'receiptNo',
+      sorter: true,
     },
     {
       title: '客户',
@@ -69,7 +87,8 @@ const ReceiptList: React.FC = () => {
       title: '收款日期',
       dataIndex: 'receiptDate',
       key: 'receiptDate',
-      render: (date: string) => new Date(date).toLocaleDateString('zh-CN'),
+      sorter: true,
+      render: (date: string) => dayjs(date).format('YYYY-MM-DD'),
     },
     {
       title: '状态',
@@ -81,6 +100,7 @@ const ReceiptList: React.FC = () => {
       title: '收款金额',
       dataIndex: 'amount',
       key: 'amount',
+      sorter: true,
       render: (amount: number) => `¥${amount.toFixed(2)}`,
     },
     {
@@ -93,7 +113,31 @@ const ReceiptList: React.FC = () => {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+      sorter: true,
+      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm:ss'),
+    },
+    {
+      title: '凭证',
+      dataIndex: 'voucherNo',
+      key: 'voucherNo',
+      render: (voucherNo: string | null, record: ReceiptResponse) => {
+        if (voucherNo && record.voucherId) {
+          return (
+            <Space>
+              <Badge status="processing" />
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: 0 }}
+                onClick={() => (window.location.href = `/finance/voucher-list?voucherId=${record.voucherId}`)}
+              >
+                {voucherNo}
+              </Button>
+            </Space>
+          );
+        }
+        return <Text type="secondary" style={{ fontSize: 12 }}>未生成</Text>;
+      },
     },
     {
       title: '操作',
@@ -122,25 +166,33 @@ const ReceiptList: React.FC = () => {
               <Button type="link" size="small" icon={<CheckOutlined />} onClick={() => handleConfirm(record.id)}>
                 确认收款
               </Button>
+              <Button type="link" size="small" icon={<CloseOutlined />} onClick={() => handleCancel(record.id)}>
+                取消
+              </Button>
             </>
-          )}
-          {record.status === 'PENDING' && (
-            <Button type="link" size="small" icon={<CloseOutlined />} onClick={() => handleCancel(record.id)}>
-              取消
-            </Button>
           )}
         </Space>
       ),
     },
   ];
 
-  const fetchReceipts = async (page = 1, limit = 10) => {
+  const fetchReceipts = async (page = 1, limit = 10, search = searchText, tab = activeTab, f = filters, s = sortParam) => {
     setLoading(true);
     try {
-      const result: PaginatedResult<ReceiptResponse> = await salesApi.getReceipts({
+      const queryParams: any = {
         page,
         limit,
-      });
+        sortBy: s.sortBy,
+        sortOrder: s.sortOrder,
+        search,
+        filters: { ...f }
+      };
+
+      if (tab !== 'ALL') {
+        queryParams.filters.status = tab;
+      }
+
+      const result = await salesApi.getReceipts(queryParams);
       setReceipts(result.data);
       setPagination(result.pagination);
     } catch (error) {
@@ -148,6 +200,15 @@ const ReceiptList: React.FC = () => {
       message.error('获取收款单列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStatusCounts = async () => {
+    try {
+      const counts = await salesApi.getReceiptStatusCounts();
+      setStatusCounts(counts);
+    } catch (error) {
+      console.error('获取状态统计失败:', error);
     }
   };
 
@@ -162,19 +223,59 @@ const ReceiptList: React.FC = () => {
 
   const fetchIssuedInvoices = async () => {
     try {
-      // 只获取已开具的发票（可以收款的发票）
-      const result = await salesApi.getSalesInvoices({
-        limit: 1000,
-      });
-      // 过滤已开具和已部分付款的发票
-      const issuedInvoices = result.data.filter(
-        invoice => invoice.status === 'ISSUED' || invoice.status === 'PAID'
-      );
-      setInvoices(issuedInvoices);
+      // 获取发票列表（已开具或部分付款）
+      const result = await salesApi.getSalesInvoices({ limit: 1000 });
+      const issued = result.data.filter(inv => inv.status === 'ISSUED' || inv.status === 'PAID');
+      setInvoices(issued);
     } catch (error) {
       console.error('获取发票列表失败:', error);
-      message.error('获取发票列表失败');
     }
+  };
+
+  // 初始化加载
+  useEffect(() => {
+    fetchCustomers();
+    fetchIssuedInvoices();
+    loadStatusCounts();
+    fetchReceipts(1, pagination.limit);
+  }, []);
+
+  const handleTableChange = (pag: any, _filters: any, sorter: any) => {
+    const sortParams = {
+      sortBy: sorter.field || 'createdAt',
+      sortOrder: sorter.order === 'ascend' ? 'asc' : 'desc'
+    };
+    setSortParam(sortParams);
+    fetchReceipts(pag.current, pag.pageSize, searchText, activeTab, filters, sortParams);
+  };
+
+  const handleTabChange = (key: string) => {
+    setActiveTab(key);
+    fetchReceipts(1, pagination.limit, searchText, key, filters, sortParam);
+  };
+
+  const handleSearch = (value: string) => {
+    setSearchText(value);
+    fetchReceipts(1, pagination.limit, value, activeTab, filters, sortParam);
+  };
+
+  const handleFilterChange = (changedValues: any, allValues: any) => {
+    const newFilters = {
+      customerId: allValues.customerId,
+      startDate: allValues.dateRange?.[0]?.format('YYYY-MM-DD'),
+      endDate: allValues.dateRange?.[1]?.format('YYYY-MM-DD'),
+    };
+    setFilters(newFilters);
+  };
+
+  const applyFilters = () => {
+    fetchReceipts(1, pagination.limit, searchText, activeTab, filters, sortParam);
+  };
+
+  const resetFilters = () => {
+    setFilters({});
+    setSearchText('');
+    fetchReceipts(1, pagination.limit, '', activeTab, {}, sortParam);
   };
 
   const handleSubmit = async () => {
@@ -197,9 +298,9 @@ const ReceiptList: React.FC = () => {
       }
       setModalVisible(false);
       fetchReceipts(pagination.page, pagination.limit);
+      loadStatusCounts();
     } catch (error) {
       console.error('保存收款单失败:', error);
-      // 错误信息已由表单验证或API拦截器处理
     } finally {
       setLoading(false);
     }
@@ -214,7 +315,7 @@ const ReceiptList: React.FC = () => {
     form.setFieldsValue({
       customerId: receipt.customerId,
       invoiceId: receipt.invoiceId || undefined,
-      receiptDate: receipt.receiptDate ? new Date(receipt.receiptDate) : undefined,
+      receiptDate: receipt.receiptDate ? dayjs(receipt.receiptDate) : undefined,
       amount: receipt.amount,
       paymentMethod: receipt.paymentMethod,
     });
@@ -232,6 +333,7 @@ const ReceiptList: React.FC = () => {
       await salesApi.deleteReceipt(id);
       message.success('收款单删除成功');
       fetchReceipts(pagination.page, pagination.limit);
+      loadStatusCounts();
     } catch (error) {
       console.error('删除收款单失败:', error);
       message.error('删除收款单失败');
@@ -246,6 +348,7 @@ const ReceiptList: React.FC = () => {
       await salesApi.confirmReceipt(id);
       message.success('收款确认成功');
       fetchReceipts(pagination.page, pagination.limit);
+      loadStatusCounts();
     } catch (error) {
       console.error('确认收款失败:', error);
       message.error('确认收款失败');
@@ -260,6 +363,7 @@ const ReceiptList: React.FC = () => {
       await salesApi.cancelReceipt(id);
       message.success('收款单取消成功');
       fetchReceipts(pagination.page, pagination.limit);
+      loadStatusCounts();
     } catch (error) {
       console.error('取消收款单失败:', error);
       message.error('取消收款单失败');
@@ -269,25 +373,13 @@ const ReceiptList: React.FC = () => {
   };
 
   const handleCustomerChange = (customerId: string) => {
-    // 当客户改变时，只显示该客户的发票
     const customerInvoices = invoices.filter(invoice => invoice.customerId === customerId);
-    // 更新发票选择列表
     setInvoices(customerInvoices);
-  };
-
-  useEffect(() => {
-    fetchReceipts();
-    fetchCustomers();
-    fetchIssuedInvoices();
-  }, []);
-
-  const handleTableChange = (pagination: any) => {
-    fetchReceipts(pagination.current, pagination.pageSize);
   };
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyItems: 'center', justifyContent: 'space-between' }}>
         <Title level={4} style={{ margin: 0 }}>收款管理</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => {
           setEditingReceipt(null);
@@ -298,7 +390,67 @@ const ReceiptList: React.FC = () => {
         </Button>
       </div>
 
-      <Card>
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Form layout="inline" onValuesChange={handleFilterChange}>
+          <Form.Item name="customerId" label="客户" style={{ marginBottom: 8 }}>
+            <Select
+              allowClear
+              showSearch
+              placeholder="请选择客户"
+              style={{ width: 200 }}
+              filterOption={(input, option: any) => 
+                option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }
+            >
+              {customers.map(c => (
+                <Option key={c.id} value={c.id}>{c.code} - {c.name}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+          
+          <Form.Item name="dateRange" label="收款日期" style={{ marginBottom: 8 }}>
+            <RangePicker />
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: 8 }}>
+            <Input
+              placeholder="搜索单据号..."
+              allowClear
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              onPressEnter={() => applyFilters()}
+              style={{ width: 200 }}
+              prefix={<SearchOutlined />}
+            />
+          </Form.Item>
+          
+          <Form.Item style={{ marginBottom: 8 }}>
+            <Space>
+              <Button type="primary" onClick={applyFilters}>查询</Button>
+              <Button onClick={resetFilters} icon={<ReloadOutlined />}>重置</Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Card>
+
+      <Card size="small" bodyStyle={{ padding: 0 }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={handleTabChange}
+          items={TAB_ITEMS.map(item => ({
+             key: item.key,
+             label: (
+               <span>
+                 {item.label}
+                 <Badge
+                    count={statusCounts[item.key] || 0}
+                    style={{ backgroundColor: item.key === 'ALL' ? '#52c41a' : '#1890ff', marginLeft: 8 }}
+                 />
+               </span>
+             )
+          }))}
+          style={{ padding: '0 16px' }}
+        />
         <Table
           columns={columns}
           dataSource={receipts}
@@ -316,7 +468,6 @@ const ReceiptList: React.FC = () => {
         />
       </Card>
 
-      {/* 新增/编辑收款单模态框 */}
       <Modal
         title={editingReceipt ? "编辑收款单" : "新增收款单"}
         open={modalVisible}
@@ -351,9 +502,11 @@ const ReceiptList: React.FC = () => {
           >
             <Select placeholder="请选择发票（可选）" disabled={!!editingReceipt}>
               <Option value="">不关联发票</Option>
+              {/* @ts-ignore */}
               {invoices.map(invoice => (
                 <Option key={invoice.id} value={invoice.id}>
-                  {invoice.invoiceNo} - ¥{invoice.amount.toFixed(2)} (剩余: ¥{(invoice.amount - invoice.receipts.reduce((sum, r) => sum + r.amount, 0)).toFixed(2)})
+                  {/* @ts-ignore */}
+                  {invoice.invoiceNo} - ¥{invoice.amount.toFixed(2)} (剩余: ¥{(invoice.amount - (invoice.receipts?.reduce((sum, r) => sum + r.amount, 0) || 0)).toFixed(2)})
                 </Option>
               ))}
             </Select>
@@ -392,7 +545,6 @@ const ReceiptList: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 查看收款单模态框 */}
       <Modal
         title="查看收款单"
         open={viewModalVisible}
@@ -421,7 +573,7 @@ const ReceiptList: React.FC = () => {
               </div>
               <div>
                 <Typography.Text strong>收款日期:</Typography.Text>
-                <div>{new Date(viewingReceipt.receiptDate).toLocaleDateString('zh-CN')}</div>
+                <div>{dayjs(viewingReceipt.receiptDate).format('YYYY-MM-DD')}</div>
               </div>
               <div>
                 <Typography.Text strong>状态:</Typography.Text>
@@ -437,8 +589,18 @@ const ReceiptList: React.FC = () => {
               </div>
               <div>
                 <Typography.Text strong>创建时间:</Typography.Text>
-                <div>{new Date(viewingReceipt.createdAt).toLocaleString('zh-CN')}</div>
+                <div>{dayjs(viewingReceipt.createdAt).format('YYYY-MM-DD HH:mm:ss')}</div>
               </div>
+              {viewingReceipt.voucherNo && (
+                <div style={{ gridColumn: '1 / 3' }}>
+                    <Typography.Text strong>关联凭证:</Typography.Text>
+                    <div>
+                    <Button type="link" onClick={() => (window.location.href = `/finance/voucher-list?voucherId=${viewingReceipt.voucherId}`)}>
+                        {viewingReceipt.voucherNo}
+                    </Button>
+                    </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -15,6 +15,8 @@ export interface PaymentResponse {
   amount: number;
   paymentMethod: PaymentMethod;
   status: PaymentStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   createdAt: string;
   updatedAt: string;
 }

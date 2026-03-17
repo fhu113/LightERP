@@ -16,8 +16,26 @@ export class SalesController {
     validateQuery(queryParamsSchema),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const result = await salesService.getSalesOrders(req.query);
+        // 从 query 中提取筛选参数并构建 filters 对象
+        const { customerId, status, startDate, endDate, ...rest } = req.query as any;
+        const filters: Record<string, any> = {};
+        if (customerId) filters.customerId = customerId;
+        if (status) filters.status = status;
+        if (startDate) filters.startDate = startDate;
+        if (endDate) filters.endDate = endDate;
+        const result = await salesService.getSalesOrders({ ...rest, filters });
         res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
+
+  static getStatusCounts = [
+    async (_req: Request, res: Response, next: NextFunction) => {
+      try {
+        const counts = await salesService.getStatusCounts();
+        res.json(counts);
       } catch (error) {
         next(error);
       }

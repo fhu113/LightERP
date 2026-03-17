@@ -1,35 +1,39 @@
 import { Router } from 'express';
 import { MasterController } from '../controllers/master.controller';
+import { authenticate, requirePermission } from '../middleware/auth';
 
 const router = Router();
 
-// 会计科目路由
-router.get('/subjects', ...MasterController.getSubjects);
-router.get('/subjects/tree', ...MasterController.getSubjectTree);
-router.get('/subjects/:id', ...MasterController.getSubjectById);
-router.post('/subjects', ...MasterController.createSubject);
-router.put('/subjects/:id', ...MasterController.updateSubject);
-router.delete('/subjects/:id', ...MasterController.deleteSubject);
+// 所有路由需要认证
+router.use(authenticate);
 
-// 客户路由
-router.get('/customers', ...MasterController.getCustomers);
-router.get('/customers/:id', ...MasterController.getCustomerById);
-router.post('/customers', ...MasterController.createCustomer);
-router.put('/customers/:id', ...MasterController.updateCustomer);
-router.delete('/customers/:id', ...MasterController.deleteCustomer);
+// 会计科目路由 - 需要finance权限
+router.get('/subjects', requirePermission('finance'), ...MasterController.getSubjects);
+router.get('/subjects/tree', requirePermission('finance'), ...MasterController.getSubjectTree);
+router.get('/subjects/:id', requirePermission('finance'), ...MasterController.getSubjectById);
+router.post('/subjects', requirePermission('finance'), ...MasterController.createSubject);
+router.put('/subjects/:id', requirePermission('finance'), ...MasterController.updateSubject);
+router.delete('/subjects/:id', requirePermission('finance'), ...MasterController.deleteSubject);
 
-// 供应商路由
-router.get('/suppliers', ...MasterController.getSuppliers);
-router.get('/suppliers/:id', ...MasterController.getSupplierById);
-router.post('/suppliers', ...MasterController.createSupplier);
-router.put('/suppliers/:id', ...MasterController.updateSupplier);
-router.delete('/suppliers/:id', ...MasterController.deleteSupplier);
+// 客户路由 - 需要otc权限
+router.get('/customers', requirePermission('otc'), ...MasterController.getCustomers);
+router.get('/customers/:id', requirePermission('otc'), ...MasterController.getCustomerById);
+router.post('/customers', requirePermission('otc'), ...MasterController.createCustomer);
+router.put('/customers/:id', requirePermission('otc'), ...MasterController.updateCustomer);
+router.delete('/customers/:id', requirePermission('otc'), ...MasterController.deleteCustomer);
 
-// 物料路由
-router.get('/materials', ...MasterController.getMaterials);
-router.get('/materials/:id', ...MasterController.getMaterialById);
-router.post('/materials', ...MasterController.createMaterial);
-router.put('/materials/:id', ...MasterController.updateMaterial);
-router.delete('/materials/:id', ...MasterController.deleteMaterial);
+// 供应商路由 - 需要ptp权限
+router.get('/suppliers', requirePermission('ptp'), ...MasterController.getSuppliers);
+router.get('/suppliers/:id', requirePermission('ptp'), ...MasterController.getSupplierById);
+router.post('/suppliers', requirePermission('ptp'), ...MasterController.createSupplier);
+router.put('/suppliers/:id', requirePermission('ptp'), ...MasterController.updateSupplier);
+router.delete('/suppliers/:id', requirePermission('ptp'), ...MasterController.deleteSupplier);
+
+// 物料路由 - 需要warehouse权限
+router.get('/materials', requirePermission('warehouse'), ...MasterController.getMaterials);
+router.get('/materials/:id', requirePermission('warehouse'), ...MasterController.getMaterialById);
+router.post('/materials', requirePermission('warehouse'), ...MasterController.createMaterial);
+router.put('/materials/:id', requirePermission('warehouse'), ...MasterController.updateMaterial);
+router.delete('/materials/:id', requirePermission('warehouse'), ...MasterController.deleteMaterial);
 
 export default router;

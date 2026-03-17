@@ -47,6 +47,8 @@ export interface DeliveryResponse {
   warehouseId: string | null;
   shippingInfo: string | null;
   status: DeliveryStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   items: DeliveryItemResponse[];
   createdAt: string;
   updatedAt: string;

@@ -70,6 +70,7 @@ export async function getPurchaseInvoices(params: {
             },
           },
         },
+        voucher: true,
       },
     }),
     prisma.purchaseInvoice.count({ where }),
@@ -99,6 +100,8 @@ export async function getPurchaseInvoices(params: {
       amount: invoice.amount,
       taxAmount: invoice.taxAmount,
       status: invoice.status as PurchaseInvoiceStatus,
+      voucherId: invoice.voucherId,
+      voucherNo: invoice.voucher?.voucherNo || null,
       items,
       createdAt: invoice.createdAt.toISOString(),
       updatedAt: invoice.updatedAt.toISOString(),
@@ -131,6 +134,7 @@ export async function getPurchaseInvoiceById(id: string): Promise<PurchaseInvoic
           },
         },
       },
+      voucher: true,
     },
   });
 
@@ -159,6 +163,8 @@ export async function getPurchaseInvoiceById(id: string): Promise<PurchaseInvoic
     amount: invoice.amount,
     taxAmount: invoice.taxAmount,
     status: invoice.status as PurchaseInvoiceStatus,
+    voucherId: invoice.voucherId,
+    voucherNo: invoice.voucher?.voucherNo || null,
     items,
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
@@ -194,6 +200,7 @@ export async function createPurchaseInvoice(data: CreatePurchaseInvoiceDto): Pro
           },
         },
       },
+      voucher: true,
     },
   });
 
@@ -209,6 +216,8 @@ export async function createPurchaseInvoice(data: CreatePurchaseInvoiceDto): Pro
     amount: invoice.amount,
     taxAmount: invoice.taxAmount,
     status: invoice.status as PurchaseInvoiceStatus,
+    voucherId: invoice.voucherId,
+    voucherNo: invoice.voucher?.voucherNo || null,
     items: [],
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
@@ -229,6 +238,7 @@ export async function updatePurchaseInvoice(
     include: {
       supplier: true,
       receipt: true,
+      voucher: true,
     },
   });
 
@@ -244,6 +254,8 @@ export async function updatePurchaseInvoice(
     amount: invoice.amount,
     taxAmount: invoice.taxAmount,
     status: invoice.status as PurchaseInvoiceStatus,
+    voucherId: invoice.voucherId,
+    voucherNo: invoice.voucher?.voucherNo || null,
     items: [],
     createdAt: invoice.createdAt.toISOString(),
     updatedAt: invoice.updatedAt.toISOString(),
@@ -298,27 +310,48 @@ export async function confirmPurchaseInvoice(id: string): Promise<PurchaseInvoic
   });
 
   // 自动生成财务凭证
+  let voucherId: string | null = null;
   try {
-    await voucherService.generatePurchaseInvoiceVoucher(id);
+    const voucher = await voucherService.generatePurchaseInvoiceVoucher(id);
+    voucherId = voucher?.id || null;
+    // 关联凭证到采购发票
+    if (voucherId) {
+      await prisma.purchaseInvoice.update({
+        where: { id },
+        data: { voucherId }
+      });
+    }
   } catch (error) {
     console.error('生成凭证失败:', error);
   }
 
+  // 重新查询获取凭证信息
+  const finalInvoice = await prisma.purchaseInvoice.findUnique({
+    where: { id },
+    include: {
+      supplier: true,
+      receipt: true,
+      voucher: true
+    }
+  });
+
   return {
-    id: updated.id,
-    invoiceNo: updated.invoiceNo,
-    supplierId: updated.supplierId,
-    supplierCode: updated.supplier.code,
-    supplierName: updated.supplier.name,
-    receiptId: updated.receiptId,
-    receiptNo: updated.receipt?.receiptNo || null,
-    invoiceDate: updated.invoiceDate.toISOString(),
-    amount: updated.amount,
-    taxAmount: updated.taxAmount,
-    status: updated.status as PurchaseInvoiceStatus,
+    id: finalInvoice!.id,
+    invoiceNo: finalInvoice!.invoiceNo,
+    supplierId: finalInvoice!.supplierId,
+    supplierCode: finalInvoice!.supplier.code,
+    supplierName: finalInvoice!.supplier.name,
+    receiptId: finalInvoice!.receiptId,
+    receiptNo: finalInvoice!.receipt?.receiptNo || null,
+    invoiceDate: finalInvoice!.invoiceDate.toISOString(),
+    amount: finalInvoice!.amount,
+    taxAmount: finalInvoice!.taxAmount,
+    status: finalInvoice!.status as PurchaseInvoiceStatus,
+    voucherId: finalInvoice!.voucherId,
+    voucherNo: finalInvoice!.voucher?.voucherNo || null,
     items: [],
-    createdAt: updated.createdAt.toISOString(),
-    updatedAt: updated.updatedAt.toISOString(),
+    createdAt: finalInvoice!.createdAt.toISOString(),
+    updatedAt: finalInvoice!.updatedAt.toISOString(),
   };
 }
 
@@ -328,6 +361,7 @@ export async function cancelPurchaseInvoice(id: string): Promise<PurchaseInvoice
     where: { id },
     include: {
       supplier: true,
+      voucher: true,
     },
   });
 
@@ -347,6 +381,7 @@ export async function cancelPurchaseInvoice(id: string): Promise<PurchaseInvoice
     include: {
       supplier: true,
       receipt: true,
+      voucher: true,
     },
   });
 
@@ -362,6 +397,8 @@ export async function cancelPurchaseInvoice(id: string): Promise<PurchaseInvoice
     amount: updated.amount,
     taxAmount: updated.taxAmount,
     status: updated.status as PurchaseInvoiceStatus,
+    voucherId: updated.voucherId,
+    voucherNo: updated.voucher?.voucherNo || null,
     items: [],
     createdAt: updated.createdAt.toISOString(),
     updatedAt: updated.updatedAt.toISOString(),

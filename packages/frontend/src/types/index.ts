@@ -208,6 +208,8 @@ export interface OrderProcessStatus {
       status: string;
       deliveryDate: string;
       quantity: number;
+      voucherId?: string;
+      voucherNo?: string;
     }>;
   };
   invoice: {
@@ -220,6 +222,8 @@ export interface OrderProcessStatus {
       status: string;
       invoiceDate: string;
       amount: number;
+      voucherId?: string;
+      voucherNo?: string;
     }>;
   };
   receipt: {
@@ -232,6 +236,8 @@ export interface OrderProcessStatus {
       status: string;
       receiptDate: string;
       amount: number;
+      voucherId?: string;
+      voucherNo?: string;
     }>;
   };
 }
@@ -277,6 +283,8 @@ export interface DeliveryResponse {
   warehouseId: string | null;
   shippingInfo: string | null;
   status: DeliveryStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   items: DeliveryItemResponse[];
   createdAt: string;
   updatedAt: string;
@@ -352,6 +360,8 @@ export interface ReceiptResponse {
   amount: number;
   paymentMethod: PaymentMethod;
   status: ReceiptStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   createdAt: string;
 }
 
@@ -368,6 +378,7 @@ export interface UpdateReceiptDto {
   amount?: number;
   paymentMethod?: PaymentMethod;
   status?: ReceiptStatus;
+  voucherId?: string;
 }
 
 // 采购订单类型
@@ -445,6 +456,8 @@ export interface PurchaseReceiptResponse {
   receiptDate: string;
   warehouseId: string | null;
   status: PurchaseReceiptStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   items: PurchaseReceiptItemResponse[];
   createdAt: string;
   updatedAt: string;
@@ -495,6 +508,8 @@ export interface PurchaseInvoiceResponse {
   amount: number;
   taxAmount: number;
   status: PurchaseInvoiceStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   items: PurchaseInvoiceItemResponse[];
   createdAt: string;
   updatedAt: string;
@@ -527,6 +542,8 @@ export interface PaymentResponse {
   amount: number;
   paymentMethod: PaymentMethod;
   status: PaymentStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -12,6 +12,17 @@ const salesInvoiceService = new SalesInvoiceService();
 export class SalesInvoiceController {
   // ========== 销售发票控制器 ==========
 
+  static getStatusCounts = [
+    async (_req: Request, res: Response, next: NextFunction) => {
+      try {
+        const counts = await salesInvoiceService.getStatusCounts();
+        res.json(counts);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
+
   static getSalesInvoices = [
     validateQuery(queryParamsSchema),
     async (req: Request, res: Response, next: NextFunction) => {

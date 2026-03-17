@@ -62,6 +62,7 @@ export async function getPayments(params: {
       include: {
         supplier: true,
         invoice: true,
+        voucher: true,
       },
     }),
     prisma.payment.count({ where }),
@@ -79,6 +80,8 @@ export async function getPayments(params: {
     amount: payment.amount,
     paymentMethod: payment.paymentMethod as any,
     status: payment.status as PaymentStatus,
+    voucherId: payment.voucherId,
+    voucherNo: payment.voucher?.voucherNo || null,
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
   }));
@@ -101,6 +104,7 @@ export async function getPaymentById(id: string): Promise<PaymentResponse | null
     include: {
       supplier: true,
       invoice: true,
+      voucher: true,
     },
   });
 
@@ -118,6 +122,8 @@ export async function getPaymentById(id: string): Promise<PaymentResponse | null
     amount: payment.amount,
     paymentMethod: payment.paymentMethod as any,
     status: payment.status as PaymentStatus,
+    voucherId: payment.voucherId,
+    voucherNo: payment.voucher?.voucherNo || null,
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
   };
@@ -127,48 +133,68 @@ export async function getPaymentById(id: string): Promise<PaymentResponse | null
 export async function createPayment(data: CreatePaymentDto): Promise<PaymentResponse> {
   const { supplierId, invoiceId, paymentDate, amount, paymentMethod } = data;
 
-  // 如果有关联发票，检查发票金额
-  if (invoiceId) {
-    const invoice = await prisma.purchaseInvoice.findUnique({
-      where: { id: invoiceId },
-    });
-
-    if (!invoice) {
-      throw new Error('采购发票不存在');
+  const payment = await prisma.$transaction(async (tx) => {
+    // 如果没有传入发票ID，自动查找该供应商的未付发票（状态为ISSUED）
+    let resolvedInvoiceId = invoiceId;
+    if (!invoiceId) {
+      const unpaidInvoice = await tx.purchaseInvoice.findFirst({
+        where: {
+          supplierId,
+          status: 'ISSUED', // 只查找已开票未付款的发票
+        },
+        orderBy: { invoiceDate: 'asc' },
+      });
+      if (unpaidInvoice) {
+        resolvedInvoiceId = unpaidInvoice.id;
+      }
     }
 
-    // 计算已付款金额
-    const paidAmount = await prisma.payment.aggregate({
-      where: {
-        invoiceId,
-        status: 'PAID',
+    // 如果有关联发票，检查发票金额
+    if (resolvedInvoiceId) {
+      const invoice = await tx.purchaseInvoice.findUnique({
+        where: { id: resolvedInvoiceId },
+      });
+
+      if (!invoice) {
+        throw new Error('采购发票不存在');
+      }
+
+      // 计算已付款金额
+      const paidAmount = await tx.payment.aggregate({
+        where: {
+          invoiceId: resolvedInvoiceId,
+          status: 'PAID',
+        },
+        _sum: {
+          amount: true,
+        },
+      });
+
+      const remainingAmount = invoice.amount - (paidAmount._sum.amount || 0);
+
+      if (amount > remainingAmount) {
+        throw new Error(`付款金额不能超过发票剩余金额 ${remainingAmount.toFixed(2)}`);
+      }
+    }
+
+    const paymentNo = await generatePaymentNo();
+
+    return tx.payment.create({
+      data: {
+        paymentNo,
+        supplierId,
+        invoiceId: resolvedInvoiceId,
+        paymentDate: paymentDate || new Date(),
+        amount,
+        paymentMethod,
+        status: 'PENDING',
       },
-      _sum: {
-        amount: true,
+      include: {
+        supplier: true,
+        invoice: true,
+        voucher: true,
       },
     });
-
-    const remainingAmount = invoice.amount - (paidAmount._sum.amount || 0);
-
-    if (amount > remainingAmount) {
-      throw new Error(`付款金额不能超过发票剩余金额 ${remainingAmount.toFixed(2)}`);
-    }
-  }
-
-  const payment = await prisma.payment.create({
-    data: {
-      paymentNo: await generatePaymentNo(),
-      supplierId,
-      invoiceId,
-      paymentDate: paymentDate || new Date(),
-      amount,
-      paymentMethod,
-      status: 'PENDING',
-    },
-    include: {
-      supplier: true,
-      invoice: true,
-    },
   });
 
   return {
@@ -183,6 +209,8 @@ export async function createPayment(data: CreatePaymentDto): Promise<PaymentResp
     amount: payment.amount,
     paymentMethod: payment.paymentMethod as any,
     status: payment.status as PaymentStatus,
+    voucherId: payment.voucherId,
+    voucherNo: payment.voucher?.voucherNo || null,
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
   };
@@ -204,6 +232,7 @@ export async function updatePayment(
     include: {
       supplier: true,
       invoice: true,
+      voucher: true,
     },
   });
 
@@ -219,6 +248,8 @@ export async function updatePayment(
     amount: payment.amount,
     paymentMethod: payment.paymentMethod as any,
     status: payment.status as PaymentStatus,
+    voucherId: payment.voucherId,
+    voucherNo: payment.voucher?.voucherNo || null,
     createdAt: payment.createdAt.toISOString(),
     updatedAt: payment.updatedAt.toISOString(),
   };
@@ -296,8 +327,10 @@ export async function confirmPayment(id: string): Promise<PaymentResponse> {
           },
         });
 
+        // 当已付金额 >= 发票不含税金额时，更新为 PAID 状态
+        // 进项税额通过税务系统认证抵扣，不需要通过付款处理
         if (paidAmount._sum.amount && paidAmount._sum.amount >= invoice.amount) {
-          // 发票已全部付款
+          // 发票已全部付款（不含税金额）
           await tx.purchaseInvoice.update({
             where: { id: payment.invoiceId },
             data: { status: 'PAID' },
@@ -316,26 +349,47 @@ export async function confirmPayment(id: string): Promise<PaymentResponse> {
   });
 
   // 自动生成财务凭证
+  let voucherId: string | null = null;
   try {
-    await voucherService.generatePaymentVoucher(id, updated!.paymentMethod);
+    const voucher = await voucherService.generatePaymentVoucher(id, updated!.paymentMethod);
+    voucherId = voucher?.id || null;
+    // 关联凭证到付款单
+    if (voucherId) {
+      await prisma.payment.update({
+        where: { id },
+        data: { voucherId }
+      });
+    }
   } catch (error) {
     console.error('生成凭证失败:', error);
   }
 
+  // 重新查询以获取凭证信息
+  const finalPayment = await prisma.payment.findUnique({
+    where: { id },
+    include: {
+      supplier: true,
+      invoice: true,
+      voucher: true
+    }
+  });
+
   return {
-    id: updated!.id,
-    paymentNo: updated!.paymentNo,
-    supplierId: updated!.supplierId,
-    supplierCode: updated!.supplier.code,
-    supplierName: updated!.supplier.name,
-    invoiceId: updated!.invoiceId,
-    invoiceNo: updated!.invoice?.invoiceNo || null,
-    paymentDate: updated!.paymentDate.toISOString(),
-    amount: updated!.amount,
-    paymentMethod: updated!.paymentMethod as any,
-    status: updated!.status as PaymentStatus,
-    createdAt: updated!.createdAt.toISOString(),
-    updatedAt: updated!.updatedAt.toISOString(),
+    id: finalPayment!.id,
+    paymentNo: finalPayment!.paymentNo,
+    supplierId: finalPayment!.supplierId,
+    supplierCode: finalPayment!.supplier.code,
+    supplierName: finalPayment!.supplier.name,
+    invoiceId: finalPayment!.invoiceId,
+    invoiceNo: finalPayment!.invoice?.invoiceNo || null,
+    paymentDate: finalPayment!.paymentDate.toISOString(),
+    amount: finalPayment!.amount,
+    paymentMethod: finalPayment!.paymentMethod as any,
+    status: finalPayment!.status as PaymentStatus,
+    voucherId: finalPayment!.voucherId,
+    voucherNo: finalPayment!.voucher?.voucherNo || null,
+    createdAt: finalPayment!.createdAt.toISOString(),
+    updatedAt: finalPayment!.updatedAt.toISOString(),
   };
 }
 
@@ -359,6 +413,7 @@ export async function cancelPayment(id: string): Promise<PaymentResponse> {
     include: {
       supplier: true,
       invoice: true,
+      voucher: true,
     },
   });
 
@@ -374,6 +429,8 @@ export async function cancelPayment(id: string): Promise<PaymentResponse> {
     amount: updated.amount,
     paymentMethod: updated.paymentMethod as any,
     status: updated.status as PaymentStatus,
+    voucherId: updated.voucherId,
+    voucherNo: updated.voucher?.voucherNo || null,
     createdAt: updated.createdAt.toISOString(),
     updatedAt: updated.updatedAt.toISOString(),
   };

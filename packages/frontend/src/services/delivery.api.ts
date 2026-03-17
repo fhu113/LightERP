@@ -14,6 +14,10 @@ export const deliveryApi = {
     return api.get('/api/deliveries', { params });
   },
 
+  getStatusCounts: (): Promise<Record<string, number>> => {
+    return api.get('/api/deliveries/status/counts');
+  },
+
   getDeliveryById: (id: string): Promise<DeliveryResponse> => {
     return api.get(`/api/deliveries/${id}`);
   },
@@ -36,5 +40,9 @@ export const deliveryApi = {
 
   cancelDelivery: (id: string): Promise<DeliveryResponse> => {
     return api.post(`/api/deliveries/${id}/cancel`);
+  },
+
+  reverseDelivery: (id: string): Promise<DeliveryResponse> => {
+    return api.post(`/api/deliveries/${id}/reverse`);
   },
 };

@@ -2,6 +2,7 @@ import React from 'react';
 import { ConfigProvider, App as AntdApp, theme } from 'antd';
 import { BrowserRouter } from 'react-router-dom';
 import zhCN from 'antd/locale/zh_CN';
+import { AuthProvider } from './contexts/AuthContext';
 import AppRoutes from './routes';
 import './index.css';
 
@@ -18,9 +19,11 @@ const App: React.FC = () => {
       }}
     >
       <AntdApp>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AuthProvider>
       </AntdApp>
     </ConfigProvider>
   );

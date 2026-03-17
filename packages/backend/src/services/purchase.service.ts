@@ -12,7 +12,7 @@ export class PurchaseService {
   // ========== 采购订单服务 ==========
 
   async getPurchaseOrders(params: QueryParams): Promise<PaginatedResult<PurchaseOrderResponse>> {
-    const { page = 1, limit = 20, sortBy = 'orderDate', sortOrder = 'desc', search } = params;
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', search } = params;
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
@@ -76,69 +76,71 @@ export class PurchaseService {
   }
 
   async createPurchaseOrder(data: CreatePurchaseOrderDto): Promise<PurchaseOrderResponse> {
-    // 检查供应商是否存在
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: data.supplierId }
-    });
+    return prisma.$transaction(async (tx) => {
+      // 检查供应商是否存在
+      const supplier = await tx.supplier.findUnique({
+        where: { id: data.supplierId }
+      });
 
-    if (!supplier) {
-      throw new AppError('供应商不存在', 404);
-    }
+      if (!supplier) {
+        throw new AppError('供应商不存在', 404);
+      }
 
-    // 生成采购订单号
-    const orderNo = await this.generatePurchaseOrderNo();
+      // 生成采购订单号
+      const orderNo = await this.generatePurchaseOrderNo();
 
-    // 计算订单总额
-    let totalAmount = 0;
-    const items = await Promise.all(
-      data.items.map(async item => {
-        const material = await prisma.material.findUnique({
-          where: { id: item.materialId }
-        });
+      // 计算订单总额
+      let totalAmount = 0;
+      const items = await Promise.all(
+        data.items.map(async item => {
+          const material = await tx.material.findUnique({
+            where: { id: item.materialId }
+          });
 
-        if (!material) {
-          throw new AppError(`物料不存在: ${item.materialId}`, 404);
-        }
+          if (!material) {
+            throw new AppError(`物料不存在: ${item.materialId}`, 404);
+          }
 
-        const amount = item.quantity * item.unitPrice;
-        totalAmount += amount;
+          const amount = item.quantity * item.unitPrice;
+          totalAmount += amount;
 
-        return {
-          materialId: item.materialId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          amount
-        };
-      })
-    );
+          return {
+            materialId: item.materialId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            amount
+          };
+        })
+      );
 
-    if (items.length === 0) {
-      throw new AppError('采购订单必须包含至少一个物料', 400);
-    }
+      if (items.length === 0) {
+        throw new AppError('采购订单必须包含至少一个物料', 400);
+      }
 
-    // 创建采购订单
-    const order = await prisma.purchaseOrder.create({
-      data: {
-        orderNo,
-        supplierId: data.supplierId,
-        orderDate: data.orderDate || new Date(),
-        expectedDate: data.expectedDate,
-        totalAmount,
-        items: {
-          create: items
-        }
-      },
-      include: {
-        supplier: true,
-        items: {
-          include: {
-            material: true
+      // 创建采购订单
+      const order = await tx.purchaseOrder.create({
+        data: {
+          orderNo,
+          supplierId: data.supplierId,
+          orderDate: data.orderDate || new Date(),
+          expectedDate: data.expectedDate,
+          totalAmount,
+          items: {
+            create: items
+          }
+        },
+        include: {
+          supplier: true,
+          items: {
+            include: {
+              material: true
+            }
           }
         }
-      }
-    });
+      });
 
-    return this.mapToPurchaseOrderResponse(order);
+      return this.mapToPurchaseOrderResponse(order);
+    });
   }
 
   async updatePurchaseOrder(id: string, data: UpdatePurchaseOrderDto): Promise<PurchaseOrderResponse> {
@@ -296,6 +298,17 @@ export class PurchaseService {
     }
 
     return `PO-${dateStr}-${String(sequence).padStart(4, '0')}`;
+  }
+
+  async getStatusCounts(): Promise<Record<string, number>> {
+    const statuses = ['PENDING', 'CONFIRMED', 'RECEIVED', 'COMPLETED', 'CANCELLED'];
+    const counts: Record<string, number> = {};
+    const total = await prisma.purchaseOrder.count();
+    counts['ALL'] = total;
+    for (const status of statuses) {
+      counts[status] = await prisma.purchaseOrder.count({ where: { status } });
+    }
+    return counts;
   }
 
   private mapToPurchaseOrderResponse(order: any): PurchaseOrderResponse {

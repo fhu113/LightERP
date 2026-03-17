@@ -13,7 +13,7 @@ export class SalesService {
   // ========== 销售订单服务 ==========
 
   async getSalesOrders(params: QueryParams): Promise<PaginatedResult<SalesOrderResponse>> {
-    const { page = 1, limit = 20, sortBy = 'orderDate', sortOrder = 'desc', search, filters } = params;
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', search, filters } = params;
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
@@ -29,6 +29,23 @@ export class SalesService {
     // 支持 status 过滤
     if (filters?.status) {
       where.status = filters.status;
+    }
+    // 支持 customerId 过滤
+    if (filters?.customerId) {
+      where.customerId = filters.customerId;
+    }
+    // 支持日期范围过滤 (基于 createdAt)
+    if (filters?.startDate || filters?.endDate) {
+      where.createdAt = {};
+      if (filters.startDate) {
+        where.createdAt.gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        // endDate 设为当天结束 23:59:59
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
     }
 
     const [orders, total] = await Promise.all([
@@ -58,6 +75,17 @@ export class SalesService {
         totalPages: Math.ceil(total / limitNum)
       }
     };
+  }
+
+  async getStatusCounts(): Promise<Record<string, number>> {
+    const statuses = ['DRAFT', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
+    const counts: Record<string, number> = {};
+    const total = await prisma.salesOrder.count();
+    counts['ALL'] = total;
+    for (const status of statuses) {
+      counts[status] = await prisma.salesOrder.count({ where: { status } });
+    }
+    return counts;
   }
 
   async getSalesOrderById(id: string): Promise<SalesOrderResponse> {
@@ -110,6 +138,19 @@ export class SalesService {
       where: { invoiceId: { in: invoices.map(inv => inv.id) } }
     });
 
+    // 获取所有凭证信息，以便显示凭证号
+    const voucherIds = [
+      ...deliveries.map(d => d.voucherId).filter(Boolean),
+      ...invoices.map(inv => inv.voucherId).filter(Boolean),
+      ...receipts.map(r => r.voucherId).filter(Boolean)
+    ] as string[];
+
+    const vouchers = await prisma.voucher.findMany({
+      where: { id: { in: voucherIds } },
+      select: { id: true, voucherNo: true }
+    });
+    const voucherMap = new Map(vouchers.map(v => [v.id, v.voucherNo]));
+
     // 计算发货状态
     const totalOrderQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
     const totalDeliveredQuantity = deliveries.reduce((sum, d) =>
@@ -117,19 +158,19 @@ export class SalesService {
     );
     const deliveryStatus = deliveries.length === 0 ? 'none' :
       deliveries.every(d => d.status === 'CONFIRMED') ? 'completed' :
-      deliveries.some(d => d.status === 'CONFIRMED') ? 'partial' : 'draft';
+        deliveries.some(d => d.status === 'CONFIRMED') ? 'partial' : 'draft';
 
     // 计算开票状态 - 支持 ISSUED, PAID, CONFIRMED 状态
     const totalInvoiceAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
     const invoiceStatus = invoices.length === 0 ? 'none' :
       invoices.every(inv => inv.status === 'ISSUED' || inv.status === 'PAID' || inv.status === 'CONFIRMED') ? 'completed' :
-      invoices.some(inv => inv.status === 'ISSUED' || inv.status === 'PAID' || inv.status === 'CONFIRMED') ? 'partial' : 'draft';
+        invoices.some(inv => inv.status === 'ISSUED' || inv.status === 'PAID' || inv.status === 'CONFIRMED') ? 'partial' : 'draft';
 
     // 计算收款状态 - 支持 PAID, CONFIRMED 状态
     const totalReceiptAmount = receipts.reduce((sum, r) => sum + r.amount, 0);
     const receiptStatus = receipts.length === 0 ? 'none' :
       receipts.every(r => r.status === 'PAID' || r.status === 'CONFIRMED') ? 'completed' :
-      receipts.some(r => r.status === 'PAID' || r.status === 'CONFIRMED') ? 'partial' : 'draft';
+        receipts.some(r => r.status === 'PAID' || r.status === 'CONFIRMED') ? 'partial' : 'draft';
 
     return {
       orderId: order.id,
@@ -146,7 +187,9 @@ export class SalesService {
           deliveryNo: d.deliveryNo,
           status: d.status,
           deliveryDate: d.deliveryDate,
-          quantity: d.items.reduce((s, i) => s + i.quantity, 0)
+          quantity: d.items.reduce((s, i) => s + i.quantity, 0),
+          voucherId: d.voucherId,
+          voucherNo: d.voucherId ? voucherMap.get(d.voucherId) : undefined
         }))
       },
       invoice: {
@@ -158,7 +201,9 @@ export class SalesService {
           invoiceNo: inv.invoiceNo,
           status: inv.status,
           invoiceDate: inv.invoiceDate,
-          amount: inv.amount
+          amount: inv.amount,
+          voucherId: inv.voucherId,
+          voucherNo: inv.voucherId ? voucherMap.get(inv.voucherId) : undefined
         }))
       },
       receipt: {
@@ -170,7 +215,9 @@ export class SalesService {
           receiptNo: r.receiptNo,
           status: r.status,
           receiptDate: r.receiptDate,
-          amount: r.amount
+          amount: r.amount,
+          voucherId: r.voucherId,
+          voucherNo: r.voucherId ? voucherMap.get(r.voucherId) : undefined
         }))
       }
     };
@@ -295,61 +342,63 @@ export class SalesService {
   }
 
   async confirmOrder(id: string): Promise<SalesOrderResponse> {
-    // 检查订单是否存在
-    const existingOrder = await prisma.salesOrder.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            material: true
+    return prisma.$transaction(async (tx) => {
+      // 检查订单是否存在
+      const existingOrder = await tx.salesOrder.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: {
+              material: true
+            }
           }
-        }
-      }
-    });
-
-    if (!existingOrder) {
-      throw new AppError('销售订单不存在', 404);
-    }
-
-    // 只能确认草稿状态的订单
-    if (existingOrder.status !== 'DRAFT') {
-      throw new AppError('订单状态不允许确认', 400);
-    }
-
-    // 检查库存可用性（暂时禁用用于测试）
-    // for (const item of existingOrder.items) {
-    //   if (item.material.currentStock < item.quantity) {
-    //     throw new AppError(`物料 ${item.material.code} - ${item.material.name} 库存不足，当前库存: ${item.material.currentStock}`, 400);
-    //   }
-    // }
-
-    // 更新物料销售价（根据最新销售订单价格）
-    for (const item of existingOrder.items) {
-      await prisma.material.update({
-        where: { id: item.materialId },
-        data: {
-          salePrice: item.unitPrice
         }
       });
-    }
 
-    // 更新订单状态
-    const order = await prisma.salesOrder.update({
-      where: { id },
-      data: {
-        status: 'CONFIRMED'
-      },
-      include: {
-        customer: true,
-        items: {
-          include: {
-            material: true
+      if (!existingOrder) {
+        throw new AppError('销售订单不存在', 404);
+      }
+
+      // 只能确认草稿状态的订单
+      if (existingOrder.status !== 'DRAFT') {
+        throw new AppError('订单状态不允许确认', 400);
+      }
+
+      // 检查库存可用性（暂时禁用用于测试）
+      // for (const item of existingOrder.items) {
+      //   if (item.material.currentStock < item.quantity) {
+      //     throw new AppError(`物料 ${item.material.code} - ${item.material.name} 库存不足，当前库存: ${item.material.currentStock}`, 400);
+      //   }
+      // }
+
+      // 更新物料销售价（根据最新销售订单价格）
+      for (const item of existingOrder.items) {
+        await tx.material.update({
+          where: { id: item.materialId },
+          data: {
+            salePrice: item.unitPrice
+          }
+        });
+      }
+
+      // 更新订单状态
+      const order = await tx.salesOrder.update({
+        where: { id },
+        data: {
+          status: 'CONFIRMED'
+        },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              material: true
+            }
           }
         }
-      }
-    });
+      });
 
-    return this.mapToSalesOrderResponse(order);
+      return this.mapToSalesOrderResponse(order);
+    });
   }
 
   async cancelOrder(id: string): Promise<SalesOrderResponse> {

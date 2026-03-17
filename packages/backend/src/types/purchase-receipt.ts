@@ -44,6 +44,8 @@ export interface PurchaseReceiptResponse {
   receiptDate: string;
   warehouseId: string | null;
   status: PurchaseReceiptStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   items: PurchaseReceiptItemResponse[];
   createdAt: string;
   updatedAt: string;

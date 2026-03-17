@@ -16,7 +16,6 @@ model AccountingSubject {
   code             String   @unique
   name             String
   type             String   // ASSET, LIABILITY, EQUITY, COST, REVENUE, EXPENSE
-  balanceDirection String   @default("DEBIT") // DEBIT, CREDIT
   voucherItems     VoucherItem[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -78,6 +77,9 @@ model Material {
   purchaseReceiptItems PurchaseReceiptItem[]
   inventoryTransactions InventoryTransaction[]
   deliveryItems         DeliveryItem[]
+  productionOrderItems ProductionOrderItem[]
+  productionReceiptItems ProductionReceiptItem[]
+  bomItems       BOMItem[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -135,6 +137,8 @@ model Delivery {
   warehouseId  String?
   shippingInfo String?
   status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  voucherId    String?  // 关联的凭证ID
+  voucher      Voucher?   @relation(fields: [voucherId], references: [id])
   items        DeliveryItem[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -209,7 +213,14 @@ model Voucher {
   summary     String
   status      String   @default("DRAFT") // DRAFT, POSTED, REVERSED
   createdBy   String?
-  items       VoucherItem[]
+  items          VoucherItem[]
+  deliveries     Delivery[]
+  salesInvoices  SalesInvoice[]
+  purchaseInvoices PurchaseInvoice[]
+  purchaseReceipts PurchaseReceipt[]
+  receipts       Receipt[]
+  payments       Payment[]
+  inventoryTransactions InventoryTransaction[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -244,6 +255,8 @@ model InventoryTransaction {
   referenceType   String   // SALES_ORDER, PURCHASE_ORDER, etc.
   referenceId     String
   transactionDate DateTime @default(now())
+  voucherId       String?
+  voucher         Voucher? @relation(fields: [voucherId], references: [id])
 
   @@index([materialId])
   @@index([referenceType, referenceId])
@@ -262,6 +275,8 @@ model PurchaseInvoice {
   amount      Float    @default(0)
   taxAmount   Float    @default(0)
   status      String   @default("DRAFT") // DRAFT, ISSUED, PAID, CANCELLED
+  voucherId   String?
+  voucher     Voucher? @relation(fields: [voucherId], references: [id])
   payments    Payment[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -283,6 +298,8 @@ model SalesInvoice {
   amount      Float    @default(0)
   taxAmount   Float    @default(0)
   status      String   @default("DRAFT") // DRAFT, ISSUED, PAID, CANCELLED
+  voucherId   String?  // 关联的凭证ID
+  voucher     Voucher?   @relation(fields: [voucherId], references: [id])
   receipts    Receipt[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -304,6 +321,8 @@ model Payment {
   amount        Float    @default(0)
   paymentMethod String   // CASH, BANK_TRANSFER, CHECK, CREDIT_CARD
   status        String   @default("PENDING") // PENDING, PAID, CANCELLED
+  voucherId     String?  // 关联的凭证ID
+  voucher       Voucher?   @relation(fields: [voucherId], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -324,6 +343,8 @@ model Receipt {
   amount        Float    @default(0)
   paymentMethod String   // CASH, BANK_TRANSFER, CHECK, CREDIT_CARD
   status        String   @default("PENDING") // PENDING, PAID, CANCELLED
+  voucherId     String?  // 关联的凭证ID
+  voucher       Voucher?   @relation(fields: [voucherId], references: [id])
   createdAt     DateTime @default(now())
 
   @@index([customerId])
@@ -350,6 +371,8 @@ model PurchaseReceipt {
   receiptDate  DateTime @default(now())
   warehouseId  String?
   status       String   @default("DRAFT") // DRAFT, CONFIRMED, COMPLETED, CANCELLED
+  voucherId    String?  // 关联的凭证ID
+  voucher      Voucher? @relation(fields: [voucherId], references: [id])
   items        PurchaseReceiptItem[]
   purchaseInvoices PurchaseInvoice[]
   createdAt    DateTime @default(now())
@@ -378,18 +401,124 @@ model PurchaseReceiptItem {
   @@map("purchase_receipt_items")
 }
 
+// 生产订单
+model ProductionOrder {
+  id            String   @id @default(cuid())
+  orderNo       String   @unique
+  orderDate     DateTime @default(now())
+  expectedDate  DateTime?
+  status        String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  totalAmount   Float    @default(0)
+  remark       String?
+  items        ProductionOrderItem[]
+  receipts      ProductionReceipt[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orderNo])
+  @@index([orderDate])
+  @@map("production_orders")
+}
+
+// 生产订单明细
+model ProductionOrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        ProductionOrder @relation(fields: [orderId], references: [id])
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantity     Float
+  unitPrice    Float    @default(0)
+  amount       Float    @default(0)
+  receivedQuantity Float  @default(0) // 已收货数量
+  receiptItems ProductionReceiptItem[]
+
+  @@index([orderId])
+  @@index([materialId])
+  @@map("production_order_items")
+}
+
+// 生产收货单
+model ProductionReceipt {
+  id            String   @id @default(cuid())
+  receiptNo     String   @unique
+  orderId       String
+  order         ProductionOrder @relation(fields: [orderId], references: [id])
+  receiptDate   DateTime @default(now())
+  status        String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  remark        String?
+  items         ProductionReceiptItem[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([receiptNo])
+  @@index([orderId])
+  @@index([receiptDate])
+  @@map("production_receipts")
+}
+
+// 生产收货明细
+model ProductionReceiptItem {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receipt      ProductionReceipt @relation(fields: [receiptId], references: [id])
+  orderItemId  String
+  orderItem    ProductionOrderItem @relation(fields: [orderItemId], references: [id])
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantity     Float
+  unitPrice    Float    @default(0)
+
+  @@index([receiptId])
+  @@index([orderItemId])
+  @@index([materialId])
+  @@map("production_receipt_items")
+}
+
+// BOM主表
+model BOM {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  version     String   @default("1.0")
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE
+  remark      String?
+  items       BOMItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+  @@map("boms")
+}
+
+// BOM明细
+model BOMItem {
+  id           String   @id @default(cuid())
+  bomId        String
+  bom          BOM @relation(fields: [bomId], references: [id])
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantity     Float    // 子物料数量
+  unit         String   @default("个")
+
+  @@index([bomId])
+  @@index([materialId])
+  @@map("bom_items")
+}
+
 // 用户
 model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String
-  name      String
-  email     String?
-  phone     String?
-  role      String   @default("USER") // ADMIN, USER
-  status    String   @default("ACTIVE") // ACTIVE, INACTIVE
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  username   String   @unique
+  password   String
+  name       String
+  email      String?
+  phone      String?
+  role       String   @default("USER") // ADMIN, KEY_USER, USER
+  permissions String? // 逗号分隔的权限: finance,otc,ptp,warehouse,reports
+  status     String   @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("users")
 }

@@ -13,7 +13,7 @@ export class SalesInvoiceService {
   // ========== 销售发票服务 ==========
 
   async getSalesInvoices(params: QueryParams): Promise<PaginatedResult<SalesInvoiceResponse>> {
-    const { page = 1, limit = 20, sortBy = 'invoiceDate', sortOrder = 'desc', search } = params;
+    const { page = 1, limit = 20, sortBy = 'invoiceDate', sortOrder = 'desc', search, filters } = params;
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
@@ -28,6 +28,16 @@ export class SalesInvoiceService {
       ];
     }
 
+    if (filters) {
+      if (filters.status) where.status = filters.status;
+      if (filters.customerId) where.customerId = filters.customerId;
+      if (filters.startDate || filters.endDate) {
+        where.invoiceDate = {};
+        if (filters.startDate) where.invoiceDate.gte = new Date(filters.startDate);
+        if (filters.endDate) where.invoiceDate.lte = new Date(filters.endDate);
+      }
+    }
+
     const [invoices, total] = await Promise.all([
       prisma.salesInvoice.findMany({
         where,
@@ -40,7 +50,8 @@ export class SalesInvoiceService {
               customer: true
             }
           },
-          receipts: true
+          receipts: true,
+          voucher: true
         }
       }),
       prisma.salesInvoice.count({ where })
@@ -55,6 +66,31 @@ export class SalesInvoiceService {
         totalPages: Math.ceil(total / limitNum)
       }
     };
+  }
+
+  async getStatusCounts(): Promise<Record<string, number>> {
+    const statuses = ['DRAFT', 'ISSUED', 'PAID', 'CANCELLED'];
+    const counts: Record<string, number> = { ALL: 0 };
+
+    const results = await prisma.salesInvoice.groupBy({
+      by: ['status'],
+      _count: {
+        status: true
+      }
+    });
+
+    statuses.forEach(status => {
+      counts[status] = 0;
+    });
+
+    let total = 0;
+    results.forEach(res => {
+      counts[res.status] = res._count.status;
+      total += res._count.status;
+    });
+    counts.ALL = total;
+
+    return counts;
   }
 
   async getSalesInvoiceById(id: string): Promise<SalesInvoiceResponse> {
@@ -218,12 +254,27 @@ export class SalesInvoiceService {
 
     // 自动生成财务凭证
     try {
-      await voucherService.generateSalesInvoiceVoucher(id);
+      const voucher = await voucherService.generateSalesInvoiceVoucher(id);
+      if (voucher) {
+        await prisma.salesInvoice.update({
+          where: { id },
+          data: { voucherId: voucher.id }
+        });
+      }
     } catch (error) {
       console.error('生成凭证失败:', error);
     }
 
-    return this.mapToSalesInvoiceResponse(invoice);
+    const finalInvoice = await prisma.salesInvoice.findUnique({
+      where: { id },
+      include: {
+        order: { include: { customer: true } },
+        receipts: true,
+        voucher: true
+      }
+    });
+
+    return this.mapToSalesInvoiceResponse(finalInvoice!);
   }
 
   async cancelInvoice(id: string): Promise<SalesInvoiceResponse> {
@@ -300,6 +351,8 @@ export class SalesInvoiceService {
       amount: invoice.amount,
       taxAmount: invoice.taxAmount,
       status: invoice.status as SalesInvoiceStatus,
+      voucherId: invoice.voucherId,
+      voucherNo: invoice.voucher?.voucherNo || null,
       receipts: invoice.receipts.map((receipt: any) => ({
         id: receipt.id,
         receiptNo: receipt.receiptNo,

@@ -16,11 +16,11 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    // 可以在这里添加token等认证信息
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    // 添加token到请求头
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -55,8 +55,8 @@ api.interceptors.response.use(
             break;
           case 401:
             errorMessage = '未授权，请重新登录';
-            // 可以在这里跳转到登录页
-            // window.location.href = '/login';
+            localStorage.removeItem('token');
+            window.location.href = '/login';
             break;
           case 403:
             errorMessage = '拒绝访问';

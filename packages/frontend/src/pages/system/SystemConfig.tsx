@@ -7,6 +7,18 @@ import { Subject } from '../../types';
 
 const { Title } = Typography;
 
+interface ConfigItem {
+  key: string;
+  label: string;
+  type: 'boolean' | 'subject';
+}
+
+interface ConfigGroup {
+  title: string;
+  description?: string;
+  items: ConfigItem[];
+}
+
 interface SubjectOption {
   id: string;
   code: string;
@@ -108,6 +120,11 @@ const AccountingEnginePage: React.FC = () => {
               style={{ height: '100%' }}
               styles={{ body: { padding: group.items.length > 2 ? 12 : 16 } }}
             >
+              {group.description && (
+                <div style={{ marginBottom: 12, color: '#888', fontSize: 12 }}>
+                  {group.description}
+                </div>
+              )}
               {group.items.map((item) => (
                 <Form.Item
                   key={item.key}

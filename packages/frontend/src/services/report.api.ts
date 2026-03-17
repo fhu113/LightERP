@@ -37,4 +37,9 @@ export const reportApi = {
   getPayableReport: () => {
     return api.get('/api/reports/payable');
   },
+
+  // 综合单据查询
+  getDocumentQuery: (params: any) => {
+    return api.get('/api/reports/documents', { params });
+  },
 };

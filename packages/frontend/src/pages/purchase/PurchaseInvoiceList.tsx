@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, InputNumber, Select, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
 import { purchaseInvoiceApi } from '../../services/purchase-invoice.api';
@@ -10,6 +11,7 @@ const { Title } = Typography;
 const { Option } = Select;
 
 const PurchaseInvoiceList: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [invoices, setInvoices] = useState<PurchaseInvoiceResponse[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -83,6 +85,14 @@ const PurchaseInvoiceList: React.FC = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status: PurchaseInvoiceStatus) => <Tag color={statusColor[status]}>{statusText[status]}</Tag>,
+    },
+    {
+      title: '凭证号',
+      dataIndex: 'voucherNo',
+      key: 'voucherNo',
+      render: (voucherNo: string | null, record: PurchaseInvoiceResponse) => voucherNo ? (
+        <a onClick={() => navigate(`/finance/voucher-list?voucherId=${record.voucherId}`)}>{voucherNo}</a>
+      ) : '-',
     },
     {
       title: '创建时间',
@@ -416,6 +426,10 @@ const PurchaseInvoiceList: React.FC = () => {
               <div>
                 <Typography.Text strong>状态:</Typography.Text>
                 <div><Tag color={statusColor[viewingInvoice.status]}>{statusText[viewingInvoice.status]}</Tag></div>
+              </div>
+              <div>
+                <Typography.Text strong>凭证号:</Typography.Text>
+                <div>{viewingInvoice.voucherNo || '-'}</div>
               </div>
               <div>
                 <Typography.Text strong>创建时间:</Typography.Text>

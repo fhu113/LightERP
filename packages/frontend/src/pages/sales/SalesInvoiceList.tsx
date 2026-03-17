@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, Select, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, DatePicker, Select, Popconfirm, Badge, Input, Row, Col, Tooltip } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined, FilterOutlined, ReloadOutlined, SearchOutlined, ClearOutlined } from '@ant-design/icons';
 import { salesApi } from '../../services/sales.api';
-import { SalesInvoiceResponse, SalesInvoiceStatus, CreateSalesInvoiceDto, PaginatedResult, SalesOrderResponse } from '../../types';
+import { masterApi } from '../../services/master.api';
+import { SalesInvoiceResponse, SalesInvoiceStatus, CreateSalesInvoiceDto, PaginatedResult, SalesOrderResponse, Customer } from '../../types';
+import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const SalesInvoiceList: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -22,6 +25,27 @@ const SalesInvoiceList: React.FC = () => {
     total: 0,
     totalPages: 0,
   });
+
+  // ========== 筛选状态 ==========
+  const [activeStatus, setActiveStatus] = useState<string>('ALL');
+  const [filters, setFilters] = useState({
+    customerId: '',
+    startDate: '',
+    endDate: '',
+    search: ''
+  });
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [showFilters, setShowFilters] = useState(false);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [sortParams, setSortParams] = useState({ sortBy: 'invoiceDate', sortOrder: 'desc' });
+
+  const statusTabItems = [
+    { key: 'ALL', label: '全部', color: '#1677ff' },
+    { key: 'DRAFT', label: '草稿', color: '#d9d9d9' },
+    { key: 'ISSUED', label: '已开具', color: '#1890ff' },
+    { key: 'PAID', label: '已付款', color: '#52c41a' },
+    { key: 'CANCELLED', label: '已取消', color: '#f5222d' },
+  ];
 
   // 状态标签颜色映射
   const statusColor: Record<SalesInvoiceStatus, string> = {
@@ -44,6 +68,7 @@ const SalesInvoiceList: React.FC = () => {
       title: '发票编号',
       dataIndex: 'invoiceNo',
       key: 'invoiceNo',
+      sorter: true,
     },
     {
       title: '订单编号',
@@ -60,6 +85,7 @@ const SalesInvoiceList: React.FC = () => {
       title: '发票日期',
       dataIndex: 'invoiceDate',
       key: 'invoiceDate',
+      sorter: true,
       render: (date: string) => new Date(date).toLocaleDateString('zh-CN'),
     },
     {
@@ -72,6 +98,7 @@ const SalesInvoiceList: React.FC = () => {
       title: '发票金额',
       dataIndex: 'amount',
       key: 'amount',
+      sorter: true,
       render: (amount: number) => `¥${amount.toFixed(2)}`,
     },
     {
@@ -85,6 +112,29 @@ const SalesInvoiceList: React.FC = () => {
       dataIndex: 'createdAt',
       key: 'createdAt',
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+    },
+    {
+      title: '凭证',
+      dataIndex: 'voucherNo',
+      key: 'voucherNo',
+      render: (voucherNo: string | null) => {
+        if (voucherNo) {
+          return (
+            <Space>
+              <Badge status="processing" />
+              <Button 
+                type="link" 
+                size="small" 
+                style={{ padding: 0 }}
+                onClick={() => (window.location.href = `/finance/voucher-list?search=${voucherNo}`)}
+              >
+                {voucherNo}
+              </Button>
+            </Space>
+          );
+        }
+        return <Text type="secondary" style={{ fontSize: 12 }}>未生成</Text>;
+      },
     },
     {
       title: '操作',
@@ -115,7 +165,7 @@ const SalesInvoiceList: React.FC = () => {
               </Button>
             </>
           )}
-          {(record.status === 'DRAFT' || record.status === 'ISSUED') && record.status !== 'PAID' && (
+          {(record.status === 'DRAFT' || record.status === 'ISSUED') && (
             <Button type="link" size="small" icon={<CloseOutlined />} onClick={() => handleCancel(record.id)}>
               取消
             </Button>
@@ -125,12 +175,19 @@ const SalesInvoiceList: React.FC = () => {
     },
   ];
 
-  const fetchInvoices = async (page = 1, limit = 10) => {
+  const fetchInvoices = async (page = 1, limit = 10, sort = sortParams, currentFilters = filters, status = activeStatus) => {
     setLoading(true);
     try {
       const result: PaginatedResult<SalesInvoiceResponse> = await salesApi.getSalesInvoices({
         page,
         limit,
+        sortBy: sort.sortBy,
+        sortOrder: sort.sortOrder as any,
+        search: currentFilters.search,
+        filters: {
+          ...currentFilters,
+          status: status === 'ALL' ? undefined : status,
+        }
       });
       setInvoices(result.data);
       setPagination(result.pagination);
@@ -139,6 +196,24 @@ const SalesInvoiceList: React.FC = () => {
       message.error('获取销售发票列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStatusCounts = async () => {
+    try {
+      const counts = await salesApi.getSalesInvoiceStatusCounts();
+      setStatusCounts(counts);
+    } catch (error) {
+      console.error('获取状态统计失败:', error);
+    }
+  };
+
+  const fetchCustomers = async () => {
+    try {
+      const result = await masterApi.getCustomers({ limit: 1000 });
+      setCustomers(result.data);
+    } catch (error) {
+      console.error('获取客户列表失败:', error);
     }
   };
 
@@ -178,6 +253,24 @@ const SalesInvoiceList: React.FC = () => {
       console.error('获取订单列表失败:', error);
       message.error('获取订单列表失败');
     }
+  };
+
+  const handleRefresh = () => {
+    fetchInvoices(pagination.page, pagination.limit);
+    fetchStatusCounts();
+  };
+
+  const handleResetFilters = () => {
+    const defaultFilters = {
+      customerId: '',
+      startDate: '',
+      endDate: '',
+      search: ''
+    };
+    setFilters(defaultFilters);
+    setActiveStatus('ALL');
+    fetchInvoices(1, pagination.limit, sortParams, defaultFilters, 'ALL');
+    fetchStatusCounts();
   };
 
   const handleSubmit = async () => {
@@ -267,27 +360,148 @@ const SalesInvoiceList: React.FC = () => {
 
   useEffect(() => {
     fetchInvoices();
+    fetchStatusCounts();
+    fetchCustomers();
     fetchCompletedOrders();
   }, []);
 
-  const handleTableChange = (pagination: any) => {
-    fetchInvoices(pagination.current, pagination.pageSize);
+  useEffect(() => {
+    fetchInvoices(1, pagination.limit, sortParams, filters, activeStatus);
+    fetchStatusCounts();
+  }, [activeStatus]);
+
+  const handleTableChange = (pag: any, _filters: any, sorter: any) => {
+    const newSort = {
+      sortBy: sorter.field || 'invoiceDate',
+      sortOrder: sorter.order === 'ascend' ? 'asc' : 'desc',
+    };
+    setSortParams(newSort);
+    fetchInvoices(pag.current, pag.pageSize, newSort);
   };
 
+  const activeFilterCount = [filters.customerId, filters.startDate, filters.endDate].filter(Boolean).length;
+
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ padding: '24px' }}>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Title level={4} style={{ margin: 0 }}>销售发票管理</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-          setEditingInvoice(null);
-          form.resetFields();
-          setModalVisible(true);
-        }}>
-          新增销售发票
-        </Button>
+        <Space>
+          <Tooltip title="刷新">
+            <Button icon={<ReloadOutlined />} onClick={handleRefresh} />
+          </Tooltip>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+            setEditingInvoice(null);
+            form.resetFields();
+            fetchCompletedOrders();
+            setModalVisible(true);
+          }}>
+            新增销售发票
+          </Button>
+        </Space>
       </div>
 
-      <Card>
+      <Card bordered={false} style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showFilters ? 16 : 0 }}>
+          <Space size="middle">
+            {statusTabItems.map(tab => {
+              const count = statusCounts[tab.key] || 0;
+              const isActive = activeStatus === tab.key;
+              return (
+                <Button
+                  key={tab.key}
+                  type={isActive ? 'primary' : 'default'}
+                  size="middle"
+                  onClick={() => setActiveStatus(tab.key)}
+                  style={{
+                    borderRadius: 20,
+                    ...(isActive ? {} : { borderColor: '#d9d9d9' }),
+                  }}
+                >
+                  {tab.label}
+                  <Badge
+                    count={count}
+                    style={{
+                      marginLeft: 6,
+                      backgroundColor: isActive ? '#fff' : tab.color,
+                      color: isActive ? tab.color : '#fff',
+                      boxShadow: 'none',
+                      fontSize: 11,
+                    }}
+                    overflowCount={999}
+                    showZero
+                  />
+                </Button>
+              );
+            })}
+          </Space>
+          
+          <Space>
+            <Input
+              placeholder="搜索发票号/订单号/客户"
+              prefix={<SearchOutlined />}
+              style={{ width: 300 }}
+              value={filters.search}
+              onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              onPressEnter={() => fetchInvoices(1)}
+            />
+            <Button 
+              icon={<FilterOutlined />} 
+              type={showFilters || activeFilterCount > 0 ? 'primary' : 'default'}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              高级筛选 {activeFilterCount > 0 && `(${activeFilterCount})`}
+            </Button>
+            {(activeStatus !== 'ALL' || activeFilterCount > 0 || filters.search) && (
+              <Button icon={<ClearOutlined />} onClick={handleResetFilters} danger type="text">重置</Button>
+            )}
+          </Space>
+        </div>
+
+        {showFilters && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
+            <Row gutter={24}>
+              <Col span={8}>
+                <div style={{ marginBottom: 8, fontWeight: 500 }}>客户</div>
+                <Select
+                  showSearch
+                  placeholder="过滤客户"
+                  style={{ width: '100%' }}
+                  value={filters.customerId || undefined}
+                  onChange={val => {
+                    const newFilters = { ...filters, customerId: val || '' };
+                    setFilters(newFilters);
+                    fetchInvoices(1, pagination.limit, sortParams, newFilters);
+                  }}
+                  allowClear
+                  optionFilterProp="children"
+                >
+                  {customers.map(c => (
+                    <Option key={c.id} value={c.id}>{c.code} - {c.name}</Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={10}>
+                <div style={{ marginBottom: 8, fontWeight: 500 }}>发票日期范围</div>
+                <RangePicker 
+                  style={{ width: '100%' }}
+                  value={filters.startDate ? [dayjs(filters.startDate), dayjs(filters.endDate)] : null}
+                  onChange={(dates) => {
+                    const newFilters = {
+                      ...filters,
+                      startDate: dates ? dates[0]!.format('YYYY-MM-DD') : '',
+                      endDate: dates ? dates[1]!.format('YYYY-MM-DD') : ''
+                    };
+                    setFilters(newFilters);
+                    fetchInvoices(1, pagination.limit, sortParams, newFilters);
+                  }}
+                />
+              </Col>
+            </Row>
+          </div>
+        )}
+      </Card>
+
+      <Card bordered={false} bodyStyle={{ padding: 0 }}>
         <Table
           columns={columns}
           dataSource={invoices}
@@ -302,6 +516,7 @@ const SalesInvoiceList: React.FC = () => {
             showTotal: (total) => `共 ${total} 条`,
           }}
           onChange={handleTableChange}
+          style={{ padding: '0 16px' }}
         />
       </Card>
 

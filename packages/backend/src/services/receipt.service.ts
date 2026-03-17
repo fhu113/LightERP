@@ -14,12 +14,38 @@ export class ReceiptService {
   // ========== 收款单服务 ==========
 
   async getReceipts(params: QueryParams): Promise<PaginatedResult<ReceiptResponse>> {
-    const { page = 1, limit = 20, sortBy = 'receiptDate', sortOrder = 'desc', search } = params;
+    const { page = 1, limit = 20, sortBy = 'receiptDate', sortOrder = 'desc', search, filters } = params;
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
 
     const where: any = {};
+    if (search) {
+      where.OR = [
+        { receiptNo: { contains: search } },
+        { customer: { name: { contains: search } } },
+        { customer: { code: { contains: search } } },
+        { invoice: { invoiceNo: { contains: search } } }
+      ];
+    }
+
+    if (filters) {
+      if (filters.status) {
+        where.status = filters.status;
+      }
+      if (filters.customerId) {
+        where.customerId = filters.customerId;
+      }
+      if (filters.startDate || filters.endDate) {
+        where.receiptDate = {};
+        if (filters.startDate) {
+          where.receiptDate.gte = new Date(`${filters.startDate}T00:00:00.000Z`);
+        }
+        if (filters.endDate) {
+          where.receiptDate.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
+        }
+      }
+    }
     if (search) {
       where.OR = [
         { receiptNo: { contains: search } },
@@ -37,7 +63,8 @@ export class ReceiptService {
         orderBy: { [sortBy]: sortOrder },
         include: {
           customer: true,
-          invoice: true
+          invoice: true,
+          voucher: true
         }
       }),
       prisma.receipt.count({ where })
@@ -54,12 +81,36 @@ export class ReceiptService {
     };
   }
 
+  async getStatusCounts(): Promise<Record<string, number>> {
+    const counts = await prisma.receipt.groupBy({
+      by: ['status'],
+      _count: {
+        id: true,
+      },
+    });
+
+    const result: Record<string, number> = {
+      ALL: 0,
+      PENDING: 0,
+      PAID: 0,
+      CANCELLED: 0,
+    };
+
+    counts.forEach((item) => {
+      result[item.status] = item._count.id;
+      result['ALL'] += item._count.id;
+    });
+
+    return result;
+  }
+
   async getReceiptById(id: string): Promise<ReceiptResponse> {
     const receipt = await prisma.receipt.findUnique({
       where: { id },
       include: {
         customer: true,
-        invoice: true
+        invoice: true,
+        voucher: true
       }
     });
 
@@ -137,7 +188,8 @@ export class ReceiptService {
       },
       include: {
         customer: true,
-        invoice: true
+        invoice: true,
+        voucher: true
       }
     });
 
@@ -192,7 +244,8 @@ export class ReceiptService {
       data,
       include: {
         customer: true,
-        invoice: true
+        invoice: true,
+        voucher: true
       }
     });
 
@@ -235,9 +288,9 @@ export class ReceiptService {
     }
 
     // 开始事务：更新收款单状态，更新客户应收款，更新发票状态
-    const receipt = await prisma.$transaction(async (prisma) => {
+    const receipt = await prisma.$transaction(async (tx) => {
       // 1. 更新收款单状态
-      const updatedReceipt = await prisma.receipt.update({
+      const updatedReceipt = await tx.receipt.update({
         where: { id },
         data: { status: 'PAID' },
         include: {
@@ -247,7 +300,7 @@ export class ReceiptService {
       });
 
       // 2. 更新客户应收款余额
-      await prisma.customer.update({
+      await tx.customer.update({
         where: { id: updatedReceipt.customerId },
         data: {
           receivableBalance: {
@@ -258,7 +311,7 @@ export class ReceiptService {
 
       // 3. 如果有发票，检查发票是否已全部收款，更新发票状态
       if (updatedReceipt.invoiceId) {
-        const invoice = await prisma.salesInvoice.findUnique({
+        const invoice = await tx.salesInvoice.findUnique({
           where: { id: updatedReceipt.invoiceId },
           include: {
             receipts: {
@@ -272,13 +325,10 @@ export class ReceiptService {
 
           if (totalPaid >= invoice.amount) {
             // 发票已全部收款，更新状态为已付款
-            await prisma.salesInvoice.update({
+            await tx.salesInvoice.update({
               where: { id: updatedReceipt.invoiceId },
               data: { status: 'PAID' }
             });
-          } else if (invoice.status === 'ISSUED' && totalPaid > 0) {
-            // 发票已部分收款，保持已开具状态（部分付款）
-            // 如果需要部分付款状态，可以添加 'PARTIALLY_PAID' 状态
           }
         }
       }
@@ -288,12 +338,27 @@ export class ReceiptService {
 
     // 自动生成财务凭证
     try {
-      await voucherService.generateReceiptVoucher(id, receipt.paymentMethod);
+      const voucher = await voucherService.generateReceiptVoucher(id, receipt.paymentMethod);
+      if (voucher) {
+        await prisma.receipt.update({
+          where: { id },
+          data: { voucherId: voucher.id }
+        });
+      }
     } catch (error) {
       console.error('生成凭证失败:', error);
     }
 
-    return this.mapToReceiptResponse(receipt);
+    const finalReceipt = await prisma.receipt.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        invoice: true,
+        voucher: true
+      }
+    });
+
+    return this.mapToReceiptResponse(finalReceipt!);
   }
 
   async cancelReceipt(id: string): Promise<ReceiptResponse> {
@@ -316,7 +381,8 @@ export class ReceiptService {
       data: { status: 'CANCELLED' },
       include: {
         customer: true,
-        invoice: true
+        invoice: true,
+        voucher: true
       }
     });
 
@@ -364,6 +430,8 @@ export class ReceiptService {
       amount: receipt.amount,
       paymentMethod: receipt.paymentMethod as PaymentMethod,
       status: receipt.status as ReceiptStatus,
+      voucherId: receipt.voucherId || null,
+      voucherNo: receipt.voucher?.voucherNo || null,
       createdAt: receipt.createdAt.toISOString()
     };
   }

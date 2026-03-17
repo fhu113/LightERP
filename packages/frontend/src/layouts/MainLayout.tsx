@@ -21,12 +21,12 @@ const MainLayout: React.FC = () => {
         width={250}
         style={{
           background: colorBgContainer,
-          overflow: 'auto',
           height: '100vh',
           position: 'fixed',
           left: 0,
           top: 0,
           bottom: 0,
+          overflow: 'hidden',
         }}
       >
         <SiderMenu />

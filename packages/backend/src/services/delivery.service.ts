@@ -8,13 +8,14 @@ import {
 } from '../types/delivery';
 import { PaginatedResult, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
-import { generateDeliveryVoucher } from './voucher.service';
+import { generateDeliveryVoucher, reverseVoucher } from './voucher.service';
+import { validateDeliveryConfirmation } from './system-config.service';
 
 export class DeliveryService {
   // ========== 发货单服务 ==========
 
   async getDeliveries(params: QueryParams): Promise<PaginatedResult<DeliveryResponse>> {
-    const { page = 1, limit = 20, sortBy = 'deliveryDate', sortOrder = 'desc', search } = params;
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', search, filters } = params;
     const pageNum = Number(page);
     const limitNum = Number(limit);
     const skip = (pageNum - 1) * limitNum;
@@ -24,8 +25,32 @@ export class DeliveryService {
       where.OR = [
         { deliveryNo: { contains: search } },
         { order: { orderNo: { contains: search } } },
-        { order: { customer: { name: { contains: search } } } }
+        { order: { customer: { name: { contains: search } } } },
+        { order: { customer: { code: { contains: search } } } }
       ];
+    }
+
+    // 支持 status 过滤
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    // 支持 customerId 过滤
+    if (filters?.customerId) {
+      where.order = { customerId: filters.customerId };
+    }
+
+    // 支持日期范围过滤
+    if (filters?.startDate || filters?.endDate) {
+      where.deliveryDate = {};
+      if (filters.startDate) {
+        where.deliveryDate.gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.deliveryDate.lte = end;
+      }
     }
 
     const [deliveries, total] = await Promise.all([
@@ -49,7 +74,8 @@ export class DeliveryService {
               },
               material: true
             }
-          }
+          },
+          voucher: true,
         }
       }),
       prisma.delivery.count({ where })
@@ -64,6 +90,17 @@ export class DeliveryService {
         totalPages: Math.ceil(total / limitNum)
       }
     };
+  }
+
+  async getStatusCounts(): Promise<Record<string, number>> {
+    const statuses = ['DRAFT', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
+    const counts: Record<string, number> = {};
+    const total = await prisma.delivery.count();
+    counts['ALL'] = total;
+    for (const status of statuses) {
+      counts[status] = await prisma.delivery.count({ where: { status } });
+    }
+    return counts;
   }
 
   async getDeliveryById(id: string): Promise<DeliveryResponse> {
@@ -84,7 +121,7 @@ export class DeliveryService {
             },
             material: true
           }
-        }
+        },
       }
     });
 
@@ -252,120 +289,169 @@ export class DeliveryService {
   }
 
   async confirmDelivery(id: string): Promise<DeliveryResponse> {
-    // 检查发货单是否存在
-    const existingDelivery = await prisma.delivery.findUnique({
-      where: { id },
-      include: {
-        items: {
-          include: {
-            orderItem: {
-              include: {
-                material: true
-              }
-            },
-            material: true
+    return prisma.$transaction(async (tx) => {
+      // 检查发货单是否存在
+      const existingDelivery = await tx.delivery.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: {
+              orderItem: {
+                include: {
+                  material: true
+                }
+              },
+              material: true
+            }
           }
         }
+      });
+
+      if (!existingDelivery) {
+        throw new AppError('发货单不存在', 404);
       }
-    });
 
-    if (!existingDelivery) {
-      throw new AppError('发货单不存在', 404);
-    }
-
-    // 只能确认草稿状态的发货单
-    if (existingDelivery.status !== 'DRAFT') {
-      throw new AppError('只能确认草稿状态的发货单', 400);
-    }
-
-    // 更新库存并记录库存交易
-    for (const item of existingDelivery.items) {
-      // 更新物料库存
-      await prisma.material.update({
-        where: { id: item.materialId },
-        data: {
-          currentStock: {
-            decrement: item.quantity
-          }
-        }
-      });
-
-      // 更新订单明细已发货数量
-      await prisma.salesOrderItem.update({
-        where: { id: item.orderItemId },
-        data: {
-          deliveredQuantity: {
-            increment: item.quantity
-          }
-        }
-      });
-
-      // 创建库存交易记录
-      await prisma.inventoryTransaction.create({
-        data: {
-          materialId: item.materialId,
-          transactionType: 'SALES_DELIVERY',
-          quantity: -item.quantity, // 负数表示出库
-          unitCost: item.orderItem.material.costPrice,
-          referenceType: 'DELIVERY',
-          referenceId: id,
-          transactionDate: new Date()
-        }
-      });
-    }
-
-    // 检查订单是否所有明细都已发货完成
-    const order = await prisma.salesOrder.findUnique({
-      where: { id: existingDelivery.orderId },
-      include: {
-        items: true
+      // 只能确认草稿状态的发货单
+      if (existingDelivery.status !== 'DRAFT') {
+        throw new AppError('只能确认草稿状态的发货单', 400);
       }
-    });
 
-    if (order) {
-      const allItemsDelivered = order.items.every(item => item.quantity === item.deliveredQuantity);
-      if (allItemsDelivered) {
-        // 更新订单状态为已完成
-        await prisma.salesOrder.update({
-          where: { id: order.id },
-          data: { status: 'COMPLETED' }
+      // 验证配置（成本价、科目配置等）
+      const validation = await validateDeliveryConfirmation(existingDelivery.items, tx);
+      if (!validation.valid) {
+        throw new AppError(`配置校验失败：\n${validation.errors.join('\n')}`, 400);
+      }
+
+      // 更新库存并记录库存交易
+      for (const item of existingDelivery.items) {
+        // 更新物料库存
+        await tx.material.update({
+          where: { id: item.materialId },
+          data: {
+            currentStock: {
+              decrement: item.quantity
+            }
+          }
+        });
+
+        // 更新订单明细已发货数量
+        await tx.salesOrderItem.update({
+          where: { id: item.orderItemId },
+          data: {
+            deliveredQuantity: {
+              increment: item.quantity
+            }
+          }
+        });
+
+        // 创建库存交易记录
+        await tx.inventoryTransaction.create({
+          data: {
+            materialId: item.materialId,
+            transactionType: 'SALES_DELIVERY',
+            quantity: -item.quantity, // 负数表示出库
+            unitCost: item.orderItem.material.costPrice,
+            referenceType: 'DELIVERY',
+            referenceId: id,
+            transactionDate: new Date()
+          }
         });
       }
-    }
 
-    // 更新发货单状态
-    const delivery = await prisma.delivery.update({
-      where: { id },
-      data: {
-        status: 'CONFIRMED'
-      },
-      include: {
-        order: {
-          include: {
-            customer: true
-          }
-        },
-        items: {
-          include: {
-            orderItem: {
-              include: {
-                material: true
-              }
-            },
-            material: true
-          }
+      // 检查订单是否所有明细都已发货完成
+      const order = await tx.salesOrder.findUnique({
+        where: { id: existingDelivery.orderId },
+        include: {
+          items: true
+        }
+      });
+
+      if (order) {
+        const allItemsDelivered = order.items.every(item => item.quantity === item.deliveredQuantity);
+        if (allItemsDelivered) {
+          // 更新订单状态为已完成
+          await tx.salesOrder.update({
+            where: { id: order.id },
+            data: { status: 'COMPLETED' }
+          });
         }
       }
-    });
 
-    // 自动生成凭证
-    try {
-      await generateDeliveryVoucher(id);
-    } catch (error) {
-      console.error('生成发货凭证失败:', error);
-    }
+      // 更新发货单状态
+      const delivery = await tx.delivery.update({
+        where: { id },
+        data: {
+          status: 'CONFIRMED'
+        },
+        include: {
+          order: {
+            include: {
+              customer: true
+            }
+          },
+          items: {
+            include: {
+              orderItem: {
+                include: {
+                  material: true
+                }
+              },
+              material: true
+            }
+          }
+        }
+      });
 
-    return this.mapToDeliveryResponse(delivery);
+      // 自动生成凭证
+      let voucherId: string | null = null;
+      try {
+        const voucher = await generateDeliveryVoucher(id, tx);
+        voucherId = voucher?.id || null;
+      } catch (error) {
+        console.error('生成发货凭证失败:', error);
+      }
+
+      // 如果生成了凭证，关联到发货单
+      if (voucherId) {
+        await tx.delivery.update({
+          where: { id },
+          data: { voucherId }
+        });
+      }
+
+      // 重新查询以获取最新数据（包括voucherId）
+      const updatedDelivery = await tx.delivery.findUnique({
+        where: { id },
+        include: {
+          order: {
+            include: {
+              customer: true
+            }
+          },
+          items: {
+            include: {
+              orderItem: {
+                include: {
+                  material: true
+                }
+              },
+              material: true
+            }
+          },
+        }
+      });
+
+      // 获取关联的凭证信息
+      let voucherNo: string | null = null;
+      if (updatedDelivery?.voucherId) {
+        const voucher = await tx.voucher.findUnique({
+          where: { id: updatedDelivery.voucherId }
+        });
+        voucherNo = voucher?.voucherNo || null;
+      }
+
+      return this.mapToDeliveryResponse(updatedDelivery, voucherNo);
+    }, { timeout: 30000 });
   }
 
   async cancelDelivery(id: string): Promise<DeliveryResponse> {
@@ -410,6 +496,122 @@ export class DeliveryService {
     return this.mapToDeliveryResponse(delivery);
   }
 
+  // 冲销发货单（退货处理）
+  async reverseDelivery(id: string): Promise<DeliveryResponse> {
+    // 检查发货单是否存在
+    const existingDelivery = await prisma.delivery.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            orderItem: {
+              include: {
+                material: true
+              }
+            }
+          }
+        },
+      }
+    });
+
+    if (!existingDelivery) {
+      throw new AppError('发货单不存在', 404);
+    }
+
+    // 只能冲销已确认的发货单
+    if (existingDelivery.status !== 'CONFIRMED') {
+      throw new AppError('只能冲销已确认的发货单', 400);
+    }
+
+    // 如果有关联凭证，先冲销凭证
+    if (existingDelivery.voucherId) {
+      try {
+        await reverseVoucher(existingDelivery.voucherId);
+      } catch (error) {
+        console.error('冲销凭证失败:', error);
+        throw new AppError('冲销关联凭证失败，请检查凭证状态', 400);
+      }
+    }
+
+    // 恢复库存（退货入库）
+    for (const item of existingDelivery.items) {
+      // 恢复物料库存
+      await prisma.material.update({
+        where: { id: item.materialId },
+        data: {
+          currentStock: {
+            increment: item.quantity
+          }
+        }
+      });
+
+      // 减少订单明细已发货数量
+      await prisma.salesOrderItem.update({
+        where: { id: item.orderItemId },
+        data: {
+          deliveredQuantity: {
+            decrement: item.quantity
+          }
+        }
+      });
+
+      // 创建库存交易记录（退货入库）
+      await prisma.inventoryTransaction.create({
+        data: {
+          materialId: item.materialId,
+          transactionType: 'SALES_RETURN', // 退货入库
+          quantity: item.quantity, // 正数表示入库
+          unitCost: item.orderItem.material.costPrice,
+          referenceType: 'DELIVERY_REVERSE',
+          referenceId: id,
+          transactionDate: new Date()
+        }
+      });
+    }
+
+    // 检查订单状态，如果之前是已完成则恢复为已确认
+    const order = await prisma.salesOrder.findUnique({
+      where: { id: existingDelivery.orderId },
+      include: {
+        items: true
+      }
+    });
+
+    if (order && order.status === 'COMPLETED') {
+      await prisma.salesOrder.update({
+        where: { id: order.id },
+        data: { status: 'CONFIRMED' }
+      });
+    }
+
+    // 更新发货单状态为已冲销
+    const delivery = await prisma.delivery.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED'
+      },
+      include: {
+        order: {
+          include: {
+            customer: true
+          }
+        },
+        items: {
+          include: {
+            orderItem: {
+              include: {
+                material: true
+              }
+            },
+            material: true
+          }
+        },
+      }
+    });
+
+    return this.mapToDeliveryResponse(delivery);
+  }
+
   // 生成发货单号: DN-YYYYMMDD-0001
   private async generateDeliveryNo(): Promise<string> {
     const today = new Date();
@@ -438,7 +640,7 @@ export class DeliveryService {
     return `${prefix}${sequence.toString().padStart(4, '0')}`;
   }
 
-  private mapToDeliveryResponse(delivery: any): DeliveryResponse {
+  private mapToDeliveryResponse(delivery: any, externalVoucherNo?: string | null): DeliveryResponse {
     return {
       id: delivery.id,
       deliveryNo: delivery.deliveryNo,
@@ -451,6 +653,8 @@ export class DeliveryService {
       warehouseId: delivery.warehouseId,
       shippingInfo: delivery.shippingInfo,
       status: delivery.status as DeliveryStatus,
+      voucherId: delivery.voucherId || null,
+      voucherNo: externalVoucherNo !== undefined ? externalVoucherNo : (delivery.voucher?.voucherNo || null),
       items: delivery.items.map((item: any) => this.mapToDeliveryItemResponse(item)),
       createdAt: delivery.createdAt.toISOString(),
       updatedAt: delivery.updatedAt.toISOString()

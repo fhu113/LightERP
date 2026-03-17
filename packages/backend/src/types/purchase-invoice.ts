@@ -31,6 +31,8 @@ export interface PurchaseInvoiceResponse {
   amount: number;
   taxAmount: number;
   status: PurchaseInvoiceStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   items: PurchaseInvoiceItemResponse[];
   createdAt: string;
   updatedAt: string;

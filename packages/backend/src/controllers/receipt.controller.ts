@@ -24,6 +24,17 @@ export class ReceiptController {
     }
   ];
 
+  static getStatusCounts = [
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const result = await receiptService.getStatusCounts();
+        res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
+
   static getReceiptById = [
     async (req: Request, res: Response, next: NextFunction) => {
       try {

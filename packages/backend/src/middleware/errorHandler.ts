@@ -40,7 +40,7 @@ export const errorHandler = (
 
   // Prisma错误处理
   if (err.name === 'PrismaClientKnownRequestError') {
-    response.error = '数据库操作错误';
+    response.error = `Prisma错误 (${(err as any).code}): ${err.message}`;
     res.status(400).json(response);
     return;
   }

@@ -14,6 +14,10 @@ export const purchaseApi = {
     return api.get( '/api/purchase/orders', { params });
   },
 
+  getStatusCounts: (): Promise<Record<string, number>> => {
+    return api.get('/api/purchase/orders/status-counts');
+  },
+
   getPurchaseOrderById: (id: string): Promise<PurchaseOrderResponse> => {
     return api.get(`/api/purchase/orders/${id}`);
   },

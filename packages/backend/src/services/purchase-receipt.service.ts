@@ -7,6 +7,7 @@ import {
 } from '../types/purchase-receipt';
 import { PaginatedResult, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import * as voucherService from './voucher.service';
 
 export class PurchaseReceiptService {
   // ========== 采购收货单服务 ==========
@@ -47,7 +48,8 @@ export class PurchaseReceiptService {
               },
               material: true
             }
-          }
+          },
+          voucher: true
         }
       }),
       prisma.purchaseReceipt.count({ where })
@@ -82,7 +84,8 @@ export class PurchaseReceiptService {
             },
             material: true
           }
-        }
+        },
+        voucher: true
       }
     });
 
@@ -187,7 +190,8 @@ export class PurchaseReceiptService {
             },
             material: true
           }
-        }
+        },
+        voucher: true
       }
     });
 
@@ -235,7 +239,8 @@ export class PurchaseReceiptService {
             },
             material: true
           }
-        }
+        },
+        voucher: true
       }
     });
 
@@ -377,7 +382,46 @@ export class PurchaseReceiptService {
       return updatedReceipt;
     });
 
-    return this.mapToPurchaseReceiptResponse(receipt);
+    // 自动生成财务凭证
+    let voucherId: string | null = null;
+    try {
+      const voucher = await voucherService.generatePurchaseReceiptVoucher(id);
+      voucherId = voucher?.id || null;
+      // 关联凭证到采购收货单
+      if (voucherId) {
+        await prisma.purchaseReceipt.update({
+          where: { id },
+          data: { voucherId }
+        });
+      }
+    } catch (error) {
+      console.error('生成凭证失败:', error);
+    }
+
+    // 重新查询以获取凭证信息
+    const finalReceipt = await prisma.purchaseReceipt.findUnique({
+      where: { id },
+      include: {
+        order: {
+          include: {
+            supplier: true
+          }
+        },
+        items: {
+          include: {
+            orderItem: {
+              include: {
+                material: true
+              }
+            },
+            material: true
+          }
+        },
+        voucher: true
+      }
+    });
+
+    return this.mapToPurchaseReceiptResponse(finalReceipt!);
   }
 
   async cancelPurchaseReceipt(id: string): Promise<PurchaseReceiptResponse> {
@@ -416,7 +460,8 @@ export class PurchaseReceiptService {
             },
             material: true
           }
-        }
+        },
+        voucher: true
       }
     });
 
@@ -465,6 +510,8 @@ export class PurchaseReceiptService {
       receiptDate: receipt.receiptDate.toISOString(),
       warehouseId: receipt.warehouseId,
       status: receipt.status as PurchaseReceiptStatus,
+      voucherId: receipt.voucherId,
+      voucherNo: receipt.voucher?.voucherNo || null,
       items: receipt.items.map((item: any) => ({
         id: item.id,
         orderItemId: item.orderItemId,

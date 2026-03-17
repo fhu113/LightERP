@@ -7,6 +7,7 @@ import {
   CreateUserDto,
   LoginDto,
   LoginResponse,
+  JwtPayload,
 } from '../types/auth';
 import { config } from '../config';
 
@@ -25,8 +26,8 @@ async function verifyPassword(password: string, hashedPassword: string): Promise
 }
 
 // 生成JWT令牌
-function generateToken(userId: string, role: string): string {
-  return jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+function generateToken(userId: string, role: string, permissions: string[] = []): string {
+  return jwt.sign({ userId, role, permissions }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
 // 用户列表
@@ -61,6 +62,7 @@ export async function getUsers(params: {
         email: true,
         phone: true,
         role: true,
+        permissions: true,
         status: true,
         createdAt: true,
         updatedAt: true,
@@ -76,6 +78,7 @@ export async function getUsers(params: {
     email: user.email,
     phone: user.phone,
     role: user.role as any,
+    permissions: user.permissions ? user.permissions.split(',').filter(Boolean) : [],
     status: user.status as any,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -103,6 +106,7 @@ export async function getUserById(id: string): Promise<UserResponse | null> {
       email: true,
       phone: true,
       role: true,
+      permissions: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -118,6 +122,7 @@ export async function getUserById(id: string): Promise<UserResponse | null> {
     email: user.email,
     phone: user.phone,
     role: user.role as any,
+    permissions: user.permissions ? user.permissions.split(',').filter(Boolean) : [],
     status: user.status as any,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -138,6 +143,16 @@ export async function createUser(data: CreateUserDto): Promise<UserResponse> {
   // 加密密码
   const hashedPassword = await hashPassword(data.password);
 
+  // 处理权限 - 支持数组和字符串
+  let permissionsStr: string | null = null;
+  if (data.permissions) {
+    if (Array.isArray(data.permissions)) {
+      permissionsStr = (data.permissions as string[]).join(',');
+    } else {
+      permissionsStr = data.permissions as string;
+    }
+  }
+
   const user = await prisma.user.create({
     data: {
       username: data.username,
@@ -146,6 +161,7 @@ export async function createUser(data: CreateUserDto): Promise<UserResponse> {
       email: data.email,
       phone: data.phone,
       role: data.role || 'USER',
+      permissions: permissionsStr,
     },
     select: {
       id: true,
@@ -154,6 +170,7 @@ export async function createUser(data: CreateUserDto): Promise<UserResponse> {
       email: true,
       phone: true,
       role: true,
+      permissions: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -167,6 +184,7 @@ export async function createUser(data: CreateUserDto): Promise<UserResponse> {
     email: user.email,
     phone: user.phone,
     role: user.role as any,
+    permissions: user.permissions ? user.permissions.split(',').filter(Boolean) : [],
     status: user.status as any,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -185,6 +203,15 @@ export async function updateUser(
     updateData.password = await hashPassword(data.password);
   }
 
+  // 处理权限 - 支持数组和字符串
+  if (data.permissions) {
+    if (Array.isArray(data.permissions)) {
+      updateData.permissions = (data.permissions as string[]).join(',');
+    } else {
+      updateData.permissions = data.permissions as string;
+    }
+  }
+
   const user = await prisma.user.update({
     where: { id },
     data: updateData,
@@ -195,6 +222,7 @@ export async function updateUser(
       email: true,
       phone: true,
       role: true,
+      permissions: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -208,6 +236,7 @@ export async function updateUser(
     email: user.email,
     phone: user.phone,
     role: user.role as any,
+    permissions: user.permissions ? user.permissions.split(',').filter(Boolean) : [],
     status: user.status as any,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -249,7 +278,8 @@ export async function login(data: LoginDto): Promise<LoginResponse> {
     throw new AppError('用户名或密码错误', 401);
   }
 
-  const token = generateToken(user.id, user.role);
+  const permissions = user.permissions ? user.permissions.split(',').filter(Boolean) : [];
+  const token = generateToken(user.id, user.role, permissions);
 
   return {
     token,
@@ -260,6 +290,7 @@ export async function login(data: LoginDto): Promise<LoginResponse> {
       email: user.email,
       phone: user.phone,
       role: user.role as any,
+      permissions,
       status: user.status as any,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
@@ -268,9 +299,9 @@ export async function login(data: LoginDto): Promise<LoginResponse> {
 }
 
 // 验证Token
-export function verifyToken(token: string): { userId: string; role: string } {
+export function verifyToken(token: string): JwtPayload {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     return decoded;
   } catch {
     throw new AppError('无效的令牌', 401);

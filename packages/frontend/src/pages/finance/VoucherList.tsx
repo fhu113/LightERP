@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Table, Button, Space, Tag, Modal, Descriptions, DatePicker, Select, Input, message, Popconfirm } from 'antd';
-import { EyeOutlined, DeleteOutlined, CheckOutlined } from '@ant-design/icons';
+import { EyeOutlined, DeleteOutlined, CheckOutlined, UndoOutlined } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import { voucherApi, Voucher } from '../../services/voucher.api';
 import dayjs from 'dayjs';
 
@@ -12,44 +13,61 @@ const VoucherList: React.FC = () => {
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
-  const [filters, setFilters] = useState({ status: '', startDate: '', endDate: '' });
+  const [filters, setFilters] = useState({ status: '', startDate: '', endDate: '', search: '' });
 
-  // 使用 ref 追踪 filters 变化
-  const filtersRef = useRef(filters);
+  const location = useLocation();
 
   useEffect(() => {
-    filtersRef.current = filters;
-  }, [filters]);
+    const searchParams = new URLSearchParams(location.search);
+    const searchKeyword = searchParams.get('search') || '';
+    const voucherId = searchParams.get('voucherId') || '';
+
+    if (searchKeyword || voucherId) {
+      setFilters(prev => ({ ...prev, search: searchKeyword }));
+      if (voucherId) {
+        fetchVoucherDetail(voucherId);
+      }
+    }
+  }, [location.search]);
+
+  const fetchVoucherDetail = async (id: string) => {
+    try {
+      setLoading(true);
+      const result = await voucherApi.getVoucherById(id);
+      if (result) {
+        setSelectedVoucher(result as any);
+        setDetailVisible(true);
+      }
+    } catch (error) {
+      console.error('获取凭证详情失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadVouchers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.current, filtersRef.current.status, filtersRef.current.startDate, filtersRef.current.endDate]);
+  }, [pagination.current, filters]);
 
   const loadVouchers = async () => {
     setLoading(true);
     try {
-      // 使用 ref 获取最新的 filters 值
-      const currentFilters = filtersRef.current;
-      // 过滤掉空的 filters，确保参数类型正确
       const queryParams: any = {
-        page: Number(pagination.current),
-        limit: Number(pagination.pageSize),
+        page: pagination.current,
+        limit: pagination.pageSize,
+        ...filters
       };
-      if (currentFilters.status) queryParams.status = currentFilters.status;
-      if (currentFilters.startDate) queryParams.startDate = currentFilters.startDate;
-      if (currentFilters.endDate) queryParams.endDate = currentFilters.endDate;
 
-      const result = await voucherApi.getVouchers(queryParams) as any;
-      // 确保 result 存在且有 data 属性
+      const result = await voucherApi.getVouchers(queryParams);
       if (result && result.data) {
         setVouchers(Array.isArray(result.data) ? result.data : []);
         setPagination(prev => ({ ...prev, total: result.pagination?.total || 0 }));
       } else {
         setVouchers([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载凭证失败:', error);
+      message.error(error.message || '加载凭证失败');
       setVouchers([]);
     } finally {
       setLoading(false);
@@ -66,8 +84,20 @@ const VoucherList: React.FC = () => {
       await voucherApi.postVoucher(id);
       message.success('凭证过账成功');
       loadVouchers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('过账失败:', error);
+      message.error(error?.response?.data?.message || '过账失败');
+    }
+  };
+
+  const handleReverse = async (id: string) => {
+    try {
+      await voucherApi.reverseVoucher(id);
+      message.success('凭证冲销成功');
+      loadVouchers();
+    } catch (error: any) {
+      console.error('冲销失败:', error);
+      message.error(error?.response?.data?.message || '冲销失败');
     }
   };
 
@@ -76,8 +106,9 @@ const VoucherList: React.FC = () => {
       await voucherApi.deleteVoucher(id);
       message.success('凭证删除成功');
       loadVouchers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('删除失败:', error);
+      message.error(error?.response?.data?.message || '删除失败');
     }
   };
 
@@ -174,6 +205,13 @@ const VoucherList: React.FC = () => {
               </Popconfirm>
             </>
           )}
+          {record.status === 'POSTED' && (
+            <Popconfirm title="确定冲销此凭证吗? 冲销将创建一张红字凭证" onConfirm={() => handleReverse(record.id)}>
+              <Button type="link" icon={<UndoOutlined />}>
+                冲销
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -213,6 +251,14 @@ const VoucherList: React.FC = () => {
     <div>
       <Card bordered={false}>
         <Space style={{ marginBottom: 16 }}>
+          <Input.Search
+            placeholder="搜索凭证号/摘要"
+            allowClear
+            onSearch={(value) => handleFilterChange('search', value)}
+            style={{ width: 300 }}
+            value={filters.search}
+            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+          />
           <RangePicker onChange={handleDateChange} />
           <Select
             placeholder="状态"

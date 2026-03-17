@@ -19,6 +19,9 @@ import voucherRoutes from './routes/voucher.routes';
 import reportRoutes from './routes/report.routes';
 import authRoutes from './routes/auth.routes';
 import systemConfigRoutes from './routes/system-config.routes';
+import inventoryRoutes from './routes/inventory.routes';
+import cleanupRoutes from './routes/cleanup.routes';
+import productionRoutes from './routes/production.routes';
 
 // 验证配置
 validateConfig();
@@ -90,6 +93,13 @@ app.use(`${config.app.apiPrefix}/auth`, authRoutes);
 
 // 系统配置路由
 app.use(`${config.app.apiPrefix}/system-config`, systemConfigRoutes);
+app.use(`${config.app.apiPrefix}/inventory`, inventoryRoutes);
+
+// 生产管理路由
+app.use(`${config.app.apiPrefix}/production`, productionRoutes);
+
+// 数据清理路由（仅管理员）
+app.use(`${config.app.apiPrefix}/cleanup`, cleanupRoutes);
 
 // 404处理
 app.use(notFoundHandler);

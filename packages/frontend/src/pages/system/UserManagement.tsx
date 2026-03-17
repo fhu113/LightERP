@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm } from 'antd';
+import { Card, Table, Button, Space, Tag, Modal, Form, Input, Select, message, Popconfirm, Checkbox, Typography } from 'antd';
+const { Text } = Typography;
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { authApi } from '../../services/auth.api';
 
@@ -10,6 +11,7 @@ interface User {
   email?: string;
   phone?: string;
   role: string;
+  permissions: string[];
   status: string;
   createdAt: string;
 }
@@ -28,8 +30,8 @@ const UserManagement: React.FC = () => {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const data = await authApi.getUsers() as any;
-      setUsers(data || []);
+      const result: any = await authApi.getUsers();
+      setUsers(result.data || []);
     } catch (error) {
       console.error('加载用户失败:', error);
     } finally {
@@ -51,6 +53,7 @@ const UserManagement: React.FC = () => {
       email: record.email,
       phone: record.phone,
       role: record.role,
+      permissions: record.permissions || [],
       status: record.status,
     });
     setModalVisible(true);
@@ -70,11 +73,19 @@ const UserManagement: React.FC = () => {
     try {
       const values = await form.validateFields();
 
+      // 处理权限 - 将数组转换为逗号分隔的字符串
+      const data = {
+        ...values,
+        permissions: values.role === 'USER' && values.permissions
+          ? values.permissions.join(',')
+          : undefined,
+      };
+
       if (editingUser) {
-        await authApi.updateUser(editingUser.id, values);
+        await authApi.updateUser(editingUser.id, data);
         message.success('用户更新成功');
       } else {
-        await authApi.createUser(values);
+        await authApi.createUser(data);
         message.success('用户创建成功');
       }
 
@@ -113,10 +124,36 @@ const UserManagement: React.FC = () => {
       render: (role: string) => {
         const roleMap: Record<string, { color: string; text: string }> = {
           ADMIN: { color: 'red', text: '管理员' },
+          KEY_USER: { color: 'orange', text: '关键用户' },
           USER: { color: 'blue', text: '普通用户' },
         };
         const config = roleMap[role] || { color: 'default', text: role };
         return <Tag color={config.color}>{config.text}</Tag>;
+      },
+    },
+    {
+      title: '权限',
+      dataIndex: 'permissions',
+      key: 'permissions',
+      render: (permissions: string[]) => {
+        if (!permissions || permissions.length === 0) {
+          return <Text type="secondary">-</Text>;
+        }
+        const permissionMap: Record<string, string> = {
+          finance: '财务',
+          otc: '销售',
+          ptp: '采购',
+          production: '生产',
+          warehouse: '仓库',
+          reports: '报表',
+        };
+        return (
+          <Space wrap>
+            {permissions.map((p: string) => (
+              <Tag key={p} color="blue">{permissionMap[p] || p}</Tag>
+            ))}
+          </Space>
+        );
       },
     },
     {
@@ -217,8 +254,26 @@ const UserManagement: React.FC = () => {
           <Form.Item name="role" label="角色" initialValue="USER">
             <Select>
               <Select.Option value="USER">普通用户</Select.Option>
+              <Select.Option value="KEY_USER">关键用户</Select.Option>
               <Select.Option value="ADMIN">管理员</Select.Option>
             </Select>
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate={(prev, curr) => prev.role !== curr.role}>
+            {() => (
+              <Form.Item name="permissions" label="模块权限" hidden={form.getFieldValue('role') !== 'USER'}>
+                <Checkbox.Group>
+                  <Space direction="vertical">
+                    <Checkbox value="finance">财务</Checkbox>
+                    <Checkbox value="otc">销售 (OTC)</Checkbox>
+                    <Checkbox value="ptp">采购 (PTP)</Checkbox>
+                    <Checkbox value="production">生产</Checkbox>
+                    <Checkbox value="warehouse">仓库</Checkbox>
+                    <Checkbox value="reports">报表</Checkbox>
+                  </Space>
+                </Checkbox.Group>
+              </Form.Item>
+            )}
           </Form.Item>
 
           {editingUser && (

@@ -1,4 +1,5 @@
 import api from './api';
+import { PaginatedResult } from '../types';
 
 export interface VoucherItem {
   id?: string;
@@ -33,37 +34,42 @@ export interface CreateVoucherDto {
 
 export const voucherApi = {
   // 获取凭证列表
-  getVouchers: (params?: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string }) => {
-    return api.get<{ data: Voucher[]; pagination: any }>('/vouchers', { params });
+  getVouchers: (params?: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string, search?: string }): Promise<PaginatedResult<Voucher>> => {
+    return api.get('/api/vouchers', { params });
   },
 
   // 获取凭证详情
-  getVoucherById: (id: string) => {
-    return api.get<Voucher>(`/vouchers/${id}`);
+  getVoucherById: (id: string): Promise<Voucher> => {
+    return api.get(`/api/vouchers/${id}`);
   },
 
   // 创建凭证
-  createVoucher: (data: CreateVoucherDto) => {
-    return api.post<Voucher>('/vouchers', data);
+  createVoucher: (data: CreateVoucherDto): Promise<Voucher> => {
+    return api.post('/api/vouchers', data);
   },
 
   // 过账凭证
-  postVoucher: (id: string) => {
-    return api.post<Voucher>(`/vouchers/${id}/post`);
+  postVoucher: (id: string): Promise<Voucher> => {
+    return api.post(`/api/vouchers/${id}/post`);
   },
 
   // 删除凭证
-  deleteVoucher: (id: string) => {
+  deleteVoucher: (id: string): Promise<void> => {
     return api.delete(`/api/vouchers/${id}`);
   },
 
+  // 冲销凭证
+  reverseVoucher: (id: string): Promise<Voucher> => {
+    return api.post(`/api/vouchers/${id}/reverse`);
+  },
+
   // 获取科目余额
-  getSubjectBalance: (params?: { periodId?: string }) => {
+  getSubjectBalance: (params?: { periodId?: string }): Promise<any> => {
     return api.get('/api/vouchers/subject-balance', { params });
   },
 
   // 试算平衡表
-  getTrialBalance: (params?: { periodId?: string }) => {
+  getTrialBalance: (params?: { periodId?: string }): Promise<any> => {
     return api.get('/api/vouchers/trial-balance', { params });
   },
 };

@@ -19,6 +19,7 @@ export interface UpdateReceiptDto {
   amount?: number;
   paymentMethod?: PaymentMethod;
   status?: ReceiptStatus;
+  voucherId?: string;
 }
 
 // 收款单响应
@@ -34,5 +35,7 @@ export interface ReceiptResponse {
   amount: number;
   paymentMethod: PaymentMethod;
   status: ReceiptStatus;
+  voucherId: string | null;
+  voucherNo: string | null;
   createdAt: string;
 }

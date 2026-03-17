@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import * as reportService from '../services/report.service';
+import { DocumentService } from '../services/document.service';
+
+const documentService = new DocumentService();
 
 export class ReportController {
   // 销售统计报表
@@ -66,6 +69,24 @@ export class ReportController {
       try {
         const report = await reportService.getPayableReport();
         res.json(report);
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+  // 综合单据查询
+  static searchDocuments = [
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const { documentType, keyword, startDate, endDate, limit } = req.query;
+        const results = await documentService.searchDocuments({
+          documentType: documentType as any,
+          keyword: keyword as string,
+          startDate: startDate as string,
+          endDate: endDate as string,
+          limit: limit ? Number(limit) : undefined,
+        });
+        res.json(results);
       } catch (error) {
         next(error);
       }

@@ -21,6 +21,10 @@ export const salesApi = {
     return api.get( '/api/sales/orders', { params });
   },
 
+  getStatusCounts: (): Promise<Record<string, number>> => {
+    return api.get('/api/sales/orders/status-counts');
+  },
+
   getSalesOrderById: (id: string): Promise<SalesOrderResponse> => {
     return api.get(`/api/sales/orders/${id}`);
   },
@@ -55,6 +59,10 @@ export const salesApi = {
     return api.get('/api/sales-invoices', { params });
   },
 
+  getSalesInvoiceStatusCounts: (): Promise<Record<string, number>> => {
+    return api.get('/api/sales-invoices/status/counts');
+  },
+
   getSalesInvoiceById: (id: string): Promise<SalesInvoiceResponse> => {
     return api.get(`/api/sales-invoices/${id}`);
   },
@@ -83,6 +91,10 @@ export const salesApi = {
 
   getReceipts: (params?: QueryParams): Promise<PaginatedResult<ReceiptResponse>> => {
     return api.get('/api/receipts', { params });
+  },
+
+  getReceiptStatusCounts: (): Promise<Record<string, number>> => {
+    return api.get('/api/receipts/status/counts');
   },
 
   getReceiptById: (id: string): Promise<ReceiptResponse> => {

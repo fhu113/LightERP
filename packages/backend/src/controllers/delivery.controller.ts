@@ -16,8 +16,25 @@ export class DeliveryController {
     validateQuery(queryParamsSchema),
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const result = await deliveryService.getDeliveries(req.query);
+        const { customerId, status, startDate, endDate, ...rest } = req.query as any;
+        const filters: Record<string, any> = {};
+        if (customerId) filters.customerId = customerId;
+        if (status) filters.status = status;
+        if (startDate) filters.startDate = startDate;
+        if (endDate) filters.endDate = endDate;
+        const result = await deliveryService.getDeliveries({ ...rest, filters });
         res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
+
+  static getStatusCounts = [
+    async (_req: Request, res: Response, next: NextFunction) => {
+      try {
+        const counts = await deliveryService.getStatusCounts();
+        res.json(counts);
       } catch (error) {
         next(error);
       }
@@ -85,6 +102,17 @@ export class DeliveryController {
     async (req: Request, res: Response, next: NextFunction) => {
       try {
         const result = await deliveryService.cancelDelivery(req.params.id);
+        res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    }
+  ];
+
+  static reverseDelivery = [
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const result = await deliveryService.reverseDelivery(req.params.id);
         res.json(result);
       } catch (error) {
         next(error);
