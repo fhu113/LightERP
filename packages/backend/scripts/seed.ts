@@ -1,9 +1,26 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('开始种子数据初始化...');
+
+  // 0. 创建管理员用户
+  console.log('创建管理员用户...');
+  const hashedPassword = await bcrypt.hash('admin123', 10);
+  await prisma.user.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: {
+      username: 'admin',
+      password: hashedPassword,
+      name: '系统管理员',
+      role: 'ADMIN',
+      permissions: 'finance,otc,ptp,production,warehouse,reports',
+      status: 'ACTIVE'
+    },
+  });
 
   // 1. 创建基础会计科目
   console.log('创建会计科目...');

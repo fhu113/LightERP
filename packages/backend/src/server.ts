@@ -22,6 +22,7 @@ import systemConfigRoutes from './routes/system-config.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import cleanupRoutes from './routes/cleanup.routes';
 import productionRoutes from './routes/production.routes';
+import initRoutes from './routes/init.routes';
 
 // 验证配置
 validateConfig();
@@ -100,6 +101,9 @@ app.use(`${config.app.apiPrefix}/production`, productionRoutes);
 
 // 数据清理路由（仅管理员）
 app.use(`${config.app.apiPrefix}/cleanup`, cleanupRoutes);
+
+// 初始化路由（临时）
+app.use(`${config.app.apiPrefix}/init`, initRoutes);
 
 // 404处理
 app.use(notFoundHandler);
