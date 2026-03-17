@@ -897,7 +897,6 @@ export async function getSubjectBalance(_params?: { periodId?: string }): Promis
       subjectId: subject.id,
       subjectCode: subject.code,
       subjectName: subject.name,
-      balanceDirection: subject.balanceDirection,
       initialDebit: 0,
       initialCredit: 0,
       currentDebit: 0,
@@ -915,22 +914,13 @@ export async function getSubjectBalance(_params?: { periodId?: string }): Promis
     }
   }
 
-  // 计算期末余额
+  // 计算期末余额（默认借方余额）
   for (const [_, balance] of balanceMap) {
-    if (balance.balanceDirection === 'DEBIT') {
-      balance.endingDebit = balance.initialDebit + balance.currentDebit - balance.currentCredit;
-      balance.endingCredit = 0;
-      if (balance.endingDebit < 0) {
-        balance.endingCredit = -balance.endingDebit;
-        balance.endingDebit = 0;
-      }
-    } else {
-      balance.endingCredit = balance.initialCredit + balance.currentCredit - balance.currentDebit;
+    balance.endingDebit = balance.initialDebit + balance.currentDebit - balance.currentCredit;
+    balance.endingCredit = 0;
+    if (balance.endingDebit < 0) {
+      balance.endingCredit = -balance.endingDebit;
       balance.endingDebit = 0;
-      if (balance.endingCredit < 0) {
-        balance.endingDebit = -balance.endingCredit;
-        balance.endingCredit = 0;
-      }
     }
   }
 
