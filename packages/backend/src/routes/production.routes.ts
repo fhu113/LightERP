@@ -3,6 +3,18 @@ import { prisma } from '../lib/prisma';
 
 const router = Router();
 
+// 生成生产订单编号
+async function generateOrderNo() {
+  const today = new Date();
+  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+  const count = await prisma.productionOrder.count({
+    where: {
+      orderNo: { startsWith: `PO-${dateStr}` }
+    }
+  });
+  return `PO-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+}
+
 // 生成生产收货单编号
 async function generateReceiptNo() {
   const today = new Date();
@@ -14,6 +26,207 @@ async function generateReceiptNo() {
   });
   return `PR-${dateStr}-${String(count + 1).padStart(4, '0')}`;
 }
+
+// 获取生产订单列表
+router.get('/orders', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, status } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { orderNo: { contains: search } },
+        { remark: { contains: search } },
+      ];
+    }
+    if (status) {
+      where.status = status;
+    }
+
+    const [orders, total] = await Promise.all([
+      prisma.productionOrder.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: {
+            include: {
+              material: true,
+            }
+          }
+        }
+      }),
+      prisma.productionOrder.count({ where })
+    ]);
+
+    res.json({
+      data: orders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error: any) {
+    console.error('获取生产订单列表失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 获取生产订单详情
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.productionOrder.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            material: true,
+          }
+        },
+        receipts: {
+          include: {
+            items: {
+              include: {
+                material: true,
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: '订单不存在' });
+    }
+
+    res.json(order);
+  } catch (error: any) {
+    console.error('获取生产订单详情失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 创建生产订单
+router.post('/orders', async (req, res) => {
+  try {
+    const { orderDate, expectedDate, remark, items } = req.body;
+
+    // 生成订单编号
+    const orderNo = await generateOrderNo();
+
+    // 计算总金额
+    const totalAmount = items.reduce((sum: number, item: any) => {
+      return sum + (item.quantity * item.unitPrice);
+    }, 0);
+
+    // 创建订单
+    const order = await prisma.productionOrder.create({
+      data: {
+        orderNo,
+        orderDate: orderDate ? new Date(orderDate) : new Date(),
+        expectedDate: expectedDate ? new Date(expectedDate) : null,
+        status: 'PENDING',
+        totalAmount,
+        remark,
+        items: {
+          create: items.map((item: any) => ({
+            materialId: item.materialId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice || 0,
+            amount: item.quantity * (item.unitPrice || 0),
+          }))
+        }
+      },
+      include: {
+        items: {
+          include: {
+            material: true,
+          }
+        }
+      }
+    });
+
+    res.status(201).json(order);
+  } catch (error: any) {
+    console.error('创建生产订单失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 更新生产订单
+router.put('/orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { orderDate, expectedDate, status, remark, items } = req.body;
+
+    // 如果有更新items，先删除旧的
+    if (items) {
+      await prisma.productionOrderItem.deleteMany({ where: { orderId: id } });
+    }
+
+    // 计算总金额
+    const totalAmount = items ? items.reduce((sum: number, item: any) => {
+      return sum + (item.quantity * item.unitPrice);
+    }, 0) : undefined;
+
+    const order = await prisma.productionOrder.update({
+      where: { id },
+      data: {
+        orderDate: orderDate ? new Date(orderDate) : undefined,
+        expectedDate: expectedDate ? new Date(expectedDate) : undefined,
+        status,
+        remark,
+        totalAmount,
+        ...(items && {
+          items: {
+            create: items.map((item: any) => ({
+              materialId: item.materialId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice || 0,
+              amount: item.quantity * (item.unitPrice || 0),
+            }))
+          }
+        })
+      },
+      include: {
+        items: {
+          include: {
+            material: true,
+          }
+        }
+      }
+    });
+
+    res.json(order);
+  } catch (error: any) {
+    console.error('更新生产订单失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 删除生产订单
+router.delete('/orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 先删除关联的收货单
+    await prisma.productionReceipt.deleteMany({ where: { orderId: id } });
+    // 再删除订单明细
+    await prisma.productionOrderItem.deleteMany({ where: { orderId: id } });
+    // 最后删除订单
+    await prisma.productionOrder.delete({ where: { id } });
+
+    res.json({ message: '删除成功' });
+  } catch (error: any) {
+    console.error('删除生产订单失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // 获取生产收货单列表
 router.get('/receipts', async (req, res) => {
