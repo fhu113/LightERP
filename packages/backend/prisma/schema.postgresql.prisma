@@ -14,7 +14,6 @@ model AccountingSubject {
   code             String   @unique
   name             String
   type             String
-  balanceDirection String   @default("DEBIT")
   voucherItems     VoucherItem[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -76,6 +75,9 @@ model Material {
   purchaseReceiptItems PurchaseReceiptItem[]
   inventoryTransactions InventoryTransaction[]
   deliveryItems         DeliveryItem[]
+  productionOrderItems   ProductionOrderItem[]
+  productionReceiptItems ProductionReceiptItem[]
+  bomItems       BOMItem[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -385,9 +387,112 @@ model User {
   email     String?
   phone     String?
   role      String   @default("USER")
+  permissions String?  @default("otc,ptp")
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("users")
+}
+
+// 生产订单
+model ProductionOrder {
+  id           String   @id @default(cuid())
+  orderNo      String   @unique
+  orderDate    DateTime @default(now())
+  expectedDate DateTime?
+  status       String   @default("DRAFT")
+  totalAmount  Float    @default(0)
+  remark       String?
+  createdBy    String?
+  items        ProductionOrderItem[]
+  receipts     ProductionReceipt[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orderDate])
+  @@map("production_orders")
+}
+
+// 生产订单明细
+model ProductionOrderItem {
+  id               String   @id @default(cuid())
+  orderId          String
+  order            ProductionOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  materialId       String
+  material         Material @relation(fields: [materialId], references: [id])
+  quantity         Float
+  unitPrice        Float    @default(0)
+  amount           Float    @default(0)
+  receivedQuantity Float    @default(0)
+
+  @@index([orderId])
+  @@index([materialId])
+  @@map("production_order_items")
+}
+
+// 生产收货单
+model ProductionReceipt {
+  id           String   @id @default(cuid())
+  receiptNo    String   @unique
+  orderId      String
+  order        ProductionOrder @relation(fields: [orderId], references: [id])
+  receiptDate  DateTime @default(now())
+  status       String   @default("DRAFT")
+  remark       String?
+  items        ProductionReceiptItem[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([receiptDate])
+  @@map("production_receipts")
+}
+
+// 生产收货明细
+model ProductionReceiptItem {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receipt      ProductionReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItemId  String
+  orderItem    ProductionOrderItem @relation(fields: [orderItemId], references: [id])
+  materialId   String
+  material     Material @relation(fields: [materialId], references: [id])
+  quantity     Float
+  unitPrice    Float    @default(0)
+
+  @@index([receiptId])
+  @@index([orderItemId])
+  @@index([materialId])
+  @@map("production_receipt_items")
+}
+
+// BOM
+model BOM {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  version     String   @default("1.0")
+  status      String   @default("ACTIVE")
+  remark      String?
+  items       BOMItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("boms")
+}
+
+// BOM明细
+model BOMItem {
+  id          String   @id @default(cuid())
+  bomId       String
+  bom         BOM      @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  materialId  String
+  material    Material @relation(fields: [materialId], references: [id])
+  quantity    Float
+  unit        String   @default("PCS")
+
+  @@index([bomId])
+  @@index([materialId])
+  @@map("bom_items")
 }
