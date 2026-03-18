@@ -7,6 +7,8 @@ import {
   ShopOutlined,
   InboxOutlined,
   SendOutlined,
+  BuildOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { salesApi } from '../services/sales.api';
 import { purchaseApi } from '../services/purchase.api';
@@ -147,9 +149,6 @@ const Dashboard: React.FC = () => {
     <div>
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>仪表盘</h2>
-        <p style={{ margin: '4px 0 0', color: '#8c8c8c' }}>
-          欢迎使用LightERP系统，这里是您的业务概览
-        </p>
       </div>
 
       {/* 统计卡片 */}
@@ -225,20 +224,74 @@ const Dashboard: React.FC = () => {
         {/* 快捷操作 */}
         <Col xs={24} lg={8}>
           <Card title="快捷操作">
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Button block type="primary" size="large" onClick={() => navigate('/sales/orders')}>
-                销售订单
-              </Button>
-              <Button block size="large" onClick={() => navigate('/purchase/orders')}>
-                采购订单
-              </Button>
-              <Button block size="large" onClick={() => navigate('/finance/vouchers')}>
-                录入凭证
-              </Button>
-              <Button block size="large" onClick={() => navigate('/inventory/query')}>
-                库存查询
-              </Button>
-            </Space>
+            <Row gutter={[8, 8]}>
+              <Col span={12}>
+                <Button
+                  block
+                  size="large"
+                  icon={<ShoppingOutlined />}
+                  onClick={() => navigate('/sales/orders')}
+                  style={{ height: 56, background: '#1890ff', color: '#fff' }}
+                >
+                  销售
+                </Button>
+              </Col>
+              <Col span={12}>
+                <Button
+                  block
+                  size="large"
+                  icon={<ShopOutlined />}
+                  onClick={() => navigate('/purchase/orders')}
+                  style={{ height: 56, background: '#52c41a', color: '#fff' }}
+                >
+                  采购
+                </Button>
+              </Col>
+              <Col span={12}>
+                <Button
+                  block
+                  size="large"
+                  icon={<InboxOutlined />}
+                  onClick={() => navigate('/inventory/query')}
+                  style={{ height: 56, background: '#faad14', color: '#fff' }}
+                >
+                  仓库
+                </Button>
+              </Col>
+              <Col span={12}>
+                <Button
+                  block
+                  size="large"
+                  icon={<BuildOutlined />}
+                  onClick={() => navigate('/production/orders')}
+                  style={{ height: 56, background: '#722ed1', color: '#fff' }}
+                >
+                  生产
+                </Button>
+              </Col>
+              <Col span={12}>
+                <Button
+                  block
+                  size="large"
+                  icon={<DollarOutlined />}
+                  onClick={() => navigate('/finance/vouchers')}
+                  style={{ height: 56, background: '#eb2f96', color: '#fff' }}
+                >
+                  财务
+                </Button>
+              </Col>
+              <Col span={12}>
+                <Button
+                  block
+                  size="large"
+                  icon={<BarChartOutlined />}
+                  onClick={() => navigate('/reports')}
+                  style={{ height: 56, background: '#13c2c2', color: '#fff' }}
+                >
+                  报表
+                </Button>
+              </Col>
+            </Row>
           </Card>
 
           {/* 系统状态 */}

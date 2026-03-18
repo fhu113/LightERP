@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Menu, Tooltip } from 'antd';
+import { Menu, Tooltip, theme } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   DatabaseOutlined,
@@ -12,6 +12,8 @@ import {
   BuildOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+
+const { useToken } = theme;
 
 // 模块说明配置
 const moduleDescriptions: Record<string, string> = {
@@ -52,6 +54,7 @@ const moduleDescriptions: Record<string, string> = {
   'system': '系统参数和用户管理',
   '/system/users': '用户账号和权限管理',
   '/system/cleanup': '清理业务单据数据',
+  '/system/backup': '数据库备份与恢复',
   '/system/config': '会计引擎科目配置',
 };
 
@@ -59,6 +62,7 @@ const SiderMenu: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const { token } = useToken();
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   const menuItems = useMemo(() => {
@@ -188,6 +192,7 @@ const SiderMenu: React.FC = () => {
     if (user?.role === 'ADMIN') {
       systemChildren.push({ key: '/system/users', label: '用户管理' });
       systemChildren.push({ key: '/system/cleanup', label: '数据库清理' });
+      systemChildren.push({ key: '/system/backup', label: '数据库备份' });
     }
     if (user?.role === 'ADMIN' || user?.role === 'KEY_USER') {
       systemChildren.push({ key: '/system/config', label: '会计引擎' });
@@ -291,8 +296,8 @@ const SiderMenu: React.FC = () => {
   return (
     <div style={{ padding: '16px 0', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '0 24px 16px', textAlign: 'center', flexShrink: 0 }}>
-        <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1890ff' }}>ERP</div>
-        <div style={{ fontSize: 12, color: '#8c8c8c' }}>企业资源计划</div>
+        <div style={{ fontSize: 20, fontWeight: 'bold', color: token.colorPrimary }}>ERP之光</div>
+        <div style={{ fontSize: 12, color: token.colorTextQuaternary }}>星星之火，可以燎原</div>
       </div>
 
       <div style={{ flex: 1, overflow: 'auto' }}>

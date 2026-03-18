@@ -9,11 +9,11 @@ const { Content, Sider } = Layout;
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const {
-    token: { colorBgContainer, borderRadiusLG },
+    token: { colorBgContainer, colorBgLayout, borderRadiusLG, colorBgElevated },
   } = theme.useToken();
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
       <Sider
         collapsible
         collapsed={collapsed}
@@ -32,12 +32,12 @@ const MainLayout: React.FC = () => {
         <SiderMenu />
       </Sider>
 
-      <Layout style={{ marginLeft: collapsed ? 80 : 250, transition: 'margin-left 0.2s' }}>
+      <Layout style={{ marginLeft: collapsed ? 80 : 250, transition: 'margin-left 0.2s', background: colorBgLayout }}>
         <Header collapsed={collapsed} onCollapse={() => setCollapsed(!collapsed)} />
 
         <Content
           style={{
-            margin: '16px',
+            margin: 16,
             padding: 24,
             minHeight: 280,
             background: colorBgContainer,
@@ -48,7 +48,11 @@ const MainLayout: React.FC = () => {
           <Outlet />
         </Content>
 
-        <Layout.Footer style={{ textAlign: 'center', padding: '12px 24px' }}>
+        <Layout.Footer style={{
+          textAlign: 'center',
+          padding: '12px 24px',
+          background: colorBgLayout,
+        }}>
           LightERP ©{new Date().getFullYear()} - 轻量级ERP系统
         </Layout.Footer>
       </Layout>
