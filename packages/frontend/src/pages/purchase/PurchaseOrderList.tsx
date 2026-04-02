@@ -3,6 +3,7 @@ import { Table, Button, Space, Card, Typography, message, Tag, Modal, Form, Date
 import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
 import { purchaseApi } from '../../services/purchase.api';
 import { masterApi } from '../../services/master.api';
+import { taxCodeApi, TaxCode } from '../../services/tax-code.api';
 import { PurchaseOrderResponse, PurchaseOrderStatus, CreatePurchaseOrderDto, PurchaseOrderItemDto, PaginatedResult, Supplier, Material } from '../../types';
 
 const { Title } = Typography;
@@ -17,6 +18,7 @@ const PurchaseOrderList: React.FC = () => {
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderResponse | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [taxCodes, setTaxCodes] = useState<TaxCode[]>([]);
   const [form] = Form.useForm();
   const [items, setItems] = useState<PurchaseOrderItemDto[]>([]);
   const [pagination, setPagination] = useState({
@@ -158,6 +160,16 @@ const PurchaseOrderList: React.FC = () => {
     }
   };
 
+  const fetchTaxCodes = async () => {
+    try {
+      // 采购订单使用进项税
+      const result = await taxCodeApi.getAll('INPUT');
+      setTaxCodes(result);
+    } catch (error) {
+      console.error('获取税码失败:', error);
+    }
+  };
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -200,6 +212,8 @@ const PurchaseOrderList: React.FC = () => {
       materialId: item.materialId,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
+      taxRate: item.taxRate || 0,
+      taxAmount: item.taxAmount || 0,
     })));
     setModalVisible(true);
   };
@@ -252,7 +266,7 @@ const PurchaseOrderList: React.FC = () => {
   };
 
   const addItem = () => {
-    setItems([...items, { materialId: '', quantity: 1, unitPrice: 0 }]);
+    setItems([...items, { materialId: '', quantity: 1, unitPrice: 0, taxRate: 0, taxAmount: 0 }]);
   };
 
   const removeItem = (index: number) => {
@@ -264,6 +278,15 @@ const PurchaseOrderList: React.FC = () => {
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
+
+    // 如果更新的是税率，重新计算税额
+    if (field === 'taxRate' || field === 'quantity' || field === 'unitPrice') {
+      const item = newItems[index];
+      const taxRate = item.taxRate || 0;
+      const amount = (item.quantity || 0) * (item.unitPrice || 0);
+      newItems[index].taxAmount = amount * taxRate;
+    }
+
     setItems(newItems);
   };
 
@@ -271,6 +294,7 @@ const PurchaseOrderList: React.FC = () => {
     fetchPurchaseOrders();
     fetchSuppliers();
     fetchMaterials();
+    fetchTaxCodes();
   }, []);
 
   const handleTableChange = (pagination: any) => {
@@ -388,6 +412,23 @@ const PurchaseOrderList: React.FC = () => {
                   value={item.unitPrice}
                   onChange={(value) => updateItem(index, 'unitPrice', value)}
                 />
+                <Select
+                  placeholder="税码"
+                  style={{ width: 100 }}
+                  value={item.taxRate}
+                  onChange={(value) => updateItem(index, 'taxRate', value)}
+                  disabled={!!editingOrder}
+                  allowClear
+                >
+                  {taxCodes.map(tax => (
+                    <Option key={tax.id} value={tax.rate}>
+                      {tax.name} ({(tax.rate * 100).toFixed(0)}%)
+                    </Option>
+                  ))}
+                </Select>
+                <Typography.Text type="secondary" style={{ minWidth: 60 }}>
+                  ¥{(item.taxAmount || 0).toFixed(2)}
+                </Typography.Text>
                 <Button type="text" danger onClick={() => removeItem(index)} disabled={!!editingOrder}>
                   删除
                 </Button>

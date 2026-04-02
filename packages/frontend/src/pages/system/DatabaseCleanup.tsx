@@ -84,7 +84,7 @@ const DatabaseCleanup: React.FC = () => {
           response = await cleanupApi.cleanupAll();
           break;
       }
-      setResult(response.data.data);
+      setResult(response.data);
       message.success('数据清理完成');
     } catch (error: any) {
       console.error('清理数据失败:', error);
@@ -103,7 +103,7 @@ const DatabaseCleanup: React.FC = () => {
     setLoading(true);
     try {
       const response = await cleanupApi.initInventory();
-      setInitResult(response.data.data);
+      setInitResult(response.data);
       message.success('库存初始化完成');
     } catch (error: any) {
       console.error('库存初始化失败:', error);

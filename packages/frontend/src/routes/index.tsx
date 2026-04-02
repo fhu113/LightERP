@@ -26,6 +26,8 @@ import DocumentQuery from '../pages/reports/DocumentQuery';
 import UserManagement from '../pages/system/UserManagement';
 import SystemConfig from '../pages/system/SystemConfig';
 import DatabaseCleanup from '../pages/system/DatabaseCleanup';
+import DatabaseBackup from '../pages/system/DatabaseBackup';
+import TaxCodeManagement from '../pages/system/TaxCodeManagement';
 import InventoryQuery from '../pages/inventory/InventoryQuery';
 import InventoryTransactions from '../pages/inventory/InventoryTransactions';
 import InventoryAdjustmentPage from '../pages/inventory/InventoryAdjustment';
@@ -118,6 +120,8 @@ const AppRoutes: React.FC = () => {
           <Route path="users" element={<UserManagement />} />
           <Route path="config" element={<SystemConfig />} />
           <Route path="cleanup" element={<DatabaseCleanup />} />
+          <Route path="backup" element={<DatabaseBackup />} />
+          <Route path="tax-codes" element={<TaxCodeManagement />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

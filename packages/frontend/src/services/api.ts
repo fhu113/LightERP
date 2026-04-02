@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { message } from 'antd';
+import { appMessage } from './app-message';
 
 // API基础URL - 各服务文件中已包含完整路径
 const API_BASE_URL = '';
@@ -12,6 +12,21 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+const createApiError = (errorMessage: string, error: any) => {
+  const apiError = new Error(errorMessage) as Error & {
+    status?: number;
+    response?: any;
+    data?: any;
+  };
+
+  apiError.name = 'ApiError';
+  apiError.status = error.response?.status;
+  apiError.response = error.response;
+  apiError.data = error.response?.data;
+
+  return apiError;
+};
 
 // 请求拦截器
 api.interceptors.request.use(
@@ -33,9 +48,9 @@ api.interceptors.response.use(
   (response) => {
     // 处理API统一响应格式
     if (response.data && response.data.success === false) {
-      const errorMsg = response.data.error || '请求失败';
-      message.error(errorMsg);
-      return Promise.reject(new Error(errorMsg));
+      const errorMsg = response.data.error || response.data.message || '请求失败';
+      appMessage.error(errorMsg);
+      return Promise.reject(createApiError(errorMsg, { response }));
     }
     return response.data?.data || response.data;
   },
@@ -46,8 +61,8 @@ api.interceptors.response.use(
     if (error.response) {
       // 服务器返回错误状态码
       // 尝试从响应数据中获取详细错误信息
-      if (error.response.data && error.response.data.error) {
-        errorMessage = error.response.data.error;
+      if (error.response.data && (error.response.data.error || error.response.data.message)) {
+        errorMessage = error.response.data.error || error.response.data.message;
       } else {
         switch (error.response.status) {
           case 400:
@@ -79,9 +94,9 @@ api.interceptors.response.use(
       errorMessage = error.message;
     }
 
-    message.error(errorMessage);
+    appMessage.error(errorMessage);
     console.error('API请求错误:', error);
-    return Promise.reject(new Error(errorMessage));
+    return Promise.reject(createApiError(errorMessage, error));
   }
 );
 

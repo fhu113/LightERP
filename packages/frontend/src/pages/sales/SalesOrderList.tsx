@@ -4,6 +4,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, CheckOutlined, CloseOutline
 import { useNavigate } from 'react-router-dom';
 import { salesApi } from '../../services/sales.api';
 import { masterApi } from '../../services/master.api';
+import { taxCodeApi, TaxCode } from '../../services/tax-code.api';
 import { SalesOrderResponse, SalesOrderStatus, CreateSalesOrderDto, SalesOrderItemDto, PaginatedResult, Customer, Material, OrderProcessStatus, ProcessStatus } from '../../types';
 
 const { Title, Text } = Typography;
@@ -22,6 +23,7 @@ const SalesOrderList: React.FC = () => {
   const [processLoading, setProcessLoading] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [taxCodes, setTaxCodes] = useState<TaxCode[]>([]);
   const [form] = Form.useForm();
   const [items, setItems] = useState<SalesOrderItemDto[]>([]);
   const [pagination, setPagination] = useState({
@@ -218,6 +220,16 @@ const SalesOrderList: React.FC = () => {
     }
   };
 
+  const fetchTaxCodes = async () => {
+    try {
+      // 销售订单使用销项税
+      const result = await taxCodeApi.getAll('OUTPUT');
+      setTaxCodes(result);
+    } catch (error) {
+      console.error('获取税码失败:', error);
+    }
+  };
+
   // 筛选变化时重新加载第一页
   useEffect(() => {
     fetchOrders(1, pagination.limit);
@@ -227,6 +239,7 @@ const SalesOrderList: React.FC = () => {
     fetchStatusCounts();
     fetchCustomers();
     fetchMaterials();
+    fetchTaxCodes();
   }, []);
 
   // 计算当前有多少个活跃的高级筛选
@@ -294,6 +307,8 @@ const SalesOrderList: React.FC = () => {
       materialId: item.materialId,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
+      taxRate: item.taxRate || 0,
+      taxAmount: item.taxAmount || 0,
     })));
     setModalVisible(true);
   };
@@ -359,7 +374,7 @@ const SalesOrderList: React.FC = () => {
   };
 
   const addItem = () => {
-    setItems([...items, { materialId: '', quantity: 0, unitPrice: 0 }]);
+    setItems([...items, { materialId: '', quantity: 0, unitPrice: 0, taxRate: 0, taxAmount: 0 }]);
   };
 
   const removeItem = (index: number) => {
@@ -371,6 +386,15 @@ const SalesOrderList: React.FC = () => {
   const updateItem = (index: number, field: keyof SalesOrderItemDto, value: any) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
+
+    // 如果更新的是税率，重新计算税额
+    if (field === 'taxRate' || field === 'quantity' || field === 'unitPrice') {
+      const item = newItems[index];
+      const taxRate = item.taxRate || 0;
+      const amount = (item.quantity || 0) * (item.unitPrice || 0);
+      newItems[index].taxAmount = amount * taxRate;
+    }
+
     setItems(newItems);
   };
 
@@ -594,7 +618,7 @@ const SalesOrderList: React.FC = () => {
                       <Typography.Text strong>物料 #{index + 1}</Typography.Text>
                       <Button type="link" danger size="small" onClick={() => removeItem(index)}>删除</Button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}>
                       <div>
                         <Typography.Text type="secondary">物料</Typography.Text>
                         <Select
@@ -632,10 +656,29 @@ const SalesOrderList: React.FC = () => {
                           style={{ width: '100%' }}
                         />
                       </div>
+                      <div>
+                        <Typography.Text type="secondary">税码</Typography.Text>
+                        <Select
+                          placeholder="税码"
+                          value={item.taxRate}
+                          onChange={(value) => updateItem(index, 'taxRate', value)}
+                          style={{ width: '100%' }}
+                          allowClear
+                        >
+                          {taxCodes.map(tax => (
+                            <Option key={tax.id} value={tax.rate}>
+                              {tax.name} ({(tax.rate * 100).toFixed(0)}%)
+                            </Option>
+                          ))}
+                        </Select>
+                      </div>
                     </div>
                     {item.materialId && item.quantity > 0 && item.unitPrice > 0 && (
                       <div style={{ marginTop: 8 }}>
                         <Typography.Text>金额: ¥{(item.quantity * item.unitPrice).toFixed(2)}</Typography.Text>
+                        {(item.taxAmount || 0) > 0 && (
+                          <Typography.Text type="secondary"> + 税额: ¥{item.taxAmount.toFixed(2)} = 含税: ¥{((item.quantity * item.unitPrice) + (item.taxAmount || 0)).toFixed(2)}</Typography.Text>
+                        )}
                       </div>
                     )}
                   </div>

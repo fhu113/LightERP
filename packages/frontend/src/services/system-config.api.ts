@@ -67,14 +67,8 @@ export const CONFIG_KEYS = {
   AUTO_GENERATE_VOUCHER_ENABLED: 'auto_generate_voucher_enabled',
 };
 
-// 配置分组
+// 配置分组（全局开关已在页面单独渲染）
 export const CONFIG_GROUPS = [
-  {
-    title: '全局设置',
-    items: [
-      { key: CONFIG_KEYS.AUTO_GENERATE_VOUCHER_ENABLED, label: '启用自动生成凭证', type: 'boolean' },
-    ],
-  },
   // ========== OTC 流程 ==========
   {
     title: 'OTC - 发货凭证',

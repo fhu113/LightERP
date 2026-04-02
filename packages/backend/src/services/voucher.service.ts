@@ -11,7 +11,7 @@ import {
   UpdateVoucherDto,
 } from '../types/voucher';
 import { PaginatedResult, QueryParams } from '../types';
-import { getSubjectIdFromConfig, isAutoGenerateVoucherEnabled, isAutoPostEnabled, CONFIG_KEYS } from './system-config.service';
+import { getSubjectIdFromConfig, isAutoGenerateVoucherEnabled, CONFIG_KEYS } from './system-config.service';
 
 // 生成凭证编号: V-YYYYMMDD-0001
 async function generateVoucherNo(tx: TransactionClient = prisma): Promise<string> {
@@ -254,7 +254,53 @@ export async function updateVoucher(
   };
 }
 
-// 删除凭证（只能删除草稿状态）
+// 检查凭证是否有关联的业务单据（销售发票、采购发票、发货单、收款单、付款单等）
+async function checkVoucherLinkedToBusiness(voucherId: string): Promise<{ linked: boolean; sources: string[] }> {
+  const sources: string[] = [];
+
+  // 检查销售发票
+  const salesInvoice = await prisma.salesInvoice.findFirst({
+    where: { voucherId },
+  });
+  if (salesInvoice) sources.push(`销售发票 ${salesInvoice.invoiceNo}`);
+
+  // 检查采购发票
+  const purchaseInvoice = await prisma.purchaseInvoice.findFirst({
+    where: { voucherId },
+  });
+  if (purchaseInvoice) sources.push(`采购发票 ${purchaseInvoice.invoiceNo}`);
+
+  // 检查发货单
+  const delivery = await prisma.delivery.findFirst({
+    where: { voucherId },
+  });
+  if (delivery) sources.push(`发货单 ${delivery.deliveryNo}`);
+
+  // 检查收款单
+  const receipt = await prisma.receipt.findFirst({
+    where: { voucherId },
+  });
+  if (receipt) sources.push(`收款单 ${receipt.receiptNo}`);
+
+  // 检查付款单
+  const payment = await prisma.payment.findFirst({
+    where: { voucherId },
+  });
+  if (payment) sources.push(`付款单 ${payment.paymentNo}`);
+
+  // 检查库存交易
+  const inventoryTx = await prisma.inventoryTransaction.findFirst({
+    where: { voucherId },
+  });
+  if (inventoryTx) sources.push(`库存交易 ${inventoryTx.referenceNo || inventoryTx.id}`);
+
+  return {
+    linked: sources.length > 0,
+    sources,
+  };
+}
+
+// 删除凭证
 export async function deleteVoucher(id: string): Promise<void> {
   const voucher = await prisma.voucher.findUnique({
     where: { id },
@@ -264,10 +310,40 @@ export async function deleteVoucher(id: string): Promise<void> {
     throw new AppError('凭证不存在', 404);
   }
 
-  if (voucher.status !== 'DRAFT') {
-    throw new AppError('只能删除草稿状态的凭证', 400);
+  // 手工凭证(GENERAL)可以直接删除，不受状态限制
+  if (voucher.voucherType === 'GENERAL') {
+    // 先删除凭证分录
+    await prisma.voucherItem.deleteMany({
+      where: { voucherId: id },
+    });
+    // 再删除凭证
+    await prisma.voucher.delete({
+      where: { id },
+    });
+    return;
   }
 
+  // 业务生成的凭证：检查状态
+  if (voucher.status === 'DRAFT') {
+    // 草稿状态：检查是否关联业务单据
+    const { linked, sources } = await checkVoucherLinkedToBusiness(id);
+    if (linked) {
+      throw new AppError(`该凭证已关联业务单据：${sources.join('、')}，请先删除业务单据`, 400);
+    }
+  } else if (voucher.status === 'POSTED') {
+    // 已过账：检查是否关联有效的业务单据
+    const { linked, sources } = await checkVoucherLinkedToBusiness(id);
+    if (linked) {
+      throw new AppError(`该凭证已关联业务单据：${sources.join('、')}，无法删除。若需删除，请先删除对应的业务单据`, 400);
+    }
+  }
+
+  // 先删除凭证分录
+  await prisma.voucherItem.deleteMany({
+    where: { voucherId: id },
+  });
+
+  // 再删除凭证
   await prisma.voucher.delete({
     where: { id },
   });
@@ -422,9 +498,8 @@ export async function generateDeliveryVoucher(
     ],
   }, tx);
 
-  // 检查是否需要自动过账
-  const isAutoPost = await isAutoPostEnabled(CONFIG_KEYS.OTC_DELIVERY_AUTO_POST, tx);
-  if (isAutoPost && voucher) {
+  // 会计引擎生成的凭证自动过账
+  if (voucher) {
     await postVoucher(voucher.id, tx);
   }
 
@@ -500,9 +575,8 @@ export async function generateSalesInvoiceVoucher(
     ],
   }, tx);
 
-  // 检查是否需要自动过账
-  const isAutoPostInvoice = await isAutoPostEnabled(CONFIG_KEYS.OTC_INVOICE_AUTO_POST, tx);
-  if (isAutoPostInvoice && voucher) {
+  // 会计引擎生成的凭证自动过账
+  if (voucher) {
     await postVoucher(voucher.id, tx);
   }
 
@@ -570,9 +644,8 @@ export async function generatePurchaseInvoiceVoucher(
     ],
   }, tx);
 
-  // 检查是否需要自动过账
-  const isAutoPostPurchaseInvoice = await isAutoPostEnabled(CONFIG_KEYS.PTP_INVOICE_AUTO_POST, tx);
-  if (isAutoPostPurchaseInvoice && voucher) {
+  // 会计引擎生成的凭证自动过账
+  if (voucher) {
     await postVoucher(voucher.id, tx);
   }
 
@@ -639,9 +712,8 @@ export async function generateReceiptVoucher(
     ],
   }, tx);
 
-  // 检查是否需要自动过账
-  const isAutoPostReceipt = await isAutoPostEnabled(CONFIG_KEYS.OTC_RECEIPT_AUTO_POST, tx);
-  if (isAutoPostReceipt && voucher) {
+  // 会计引擎生成的凭证自动过账
+  if (voucher) {
     await postVoucher(voucher.id, tx);
   }
 
@@ -703,9 +775,8 @@ export async function generatePaymentVoucher(
     ],
   }, tx);
 
-  // 检查是否需要自动过账
-  const isAutoPostPayment = await isAutoPostEnabled(CONFIG_KEYS.PTP_PAYMENT_AUTO_POST, tx);
-  if (isAutoPostPayment && voucher) {
+  // 会计引擎生成的凭证自动过账
+  if (voucher) {
     await postVoucher(voucher.id, tx);
   }
 
@@ -792,9 +863,8 @@ export async function generatePurchaseReceiptVoucher(
     ],
   }, tx);
 
-  // 检查是否需要自动过账
-  const isAutoPost = await isAutoPostEnabled(CONFIG_KEYS.PTP_RECEIPT_AUTO_POST, tx);
-  if (isAutoPost && voucher) {
+  // 会计引擎生成的凭证自动过账
+  if (voucher) {
     await postVoucher(voucher.id, tx);
   }
 

@@ -1,0 +1,2 @@
+# 数据库自动备份 - 每6小时执行一次 (0,6,12,18点)
+0 */6 * * * /Users/ttyy/Coding/LightERP_Claude/packages/backend/scripts/backup.sh >> /tmp/backup.log 2>&1

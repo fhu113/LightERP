@@ -86,21 +86,6 @@ model Material {
   @@map("materials")
 }
 
-// 税码
-model TaxCode {
-  id          String   @id @default(cuid())
-  code        String   @unique  // 税码，如 "VAT_IN_13", "VAT_OUT_13"
-  name        String   // 名称，如 "进项税13%", "销项税13%"
-  taxType     String   // INPUT (进项税), OUTPUT (销项税)
-  rate        Float    // 税率，如 0.13, 0.05
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("tax_codes")
-}
-
 // 销售订单
 model SalesOrder {
   id           String   @id @default(cuid())
@@ -134,8 +119,6 @@ model SalesOrderItem {
   quantity         Float
   unitPrice        Float
   amount           Float
-  taxRate          Float    @default(0)   // 税率
-  taxAmount        Float    @default(0)   // 税额
   deliveredQuantity Float    @default(0)
   deliveryItems    DeliveryItem[]
 
@@ -213,8 +196,6 @@ model PurchaseOrderItem {
   quantity         Float
   unitPrice        Float
   amount           Float
-  taxRate          Float    @default(0)   // 税率
-  taxAmount        Float    @default(0)   // 税额
   receivedQuantity Float     @default(0)
   purchaseReceiptItems PurchaseReceiptItem[]
 

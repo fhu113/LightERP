@@ -113,7 +113,7 @@ export const queryParamsSchema = Joi.object({
     .default(20),
   sortBy: Joi.string(),
   sortOrder: Joi.string().valid('asc', 'desc').default('asc'),
-  search: Joi.string(),
+  search: Joi.string().allow(''),
 });
 
 // 发货单验证

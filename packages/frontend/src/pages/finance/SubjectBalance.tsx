@@ -50,17 +50,6 @@ const SubjectBalance: React.FC = () => {
       key: 'subjectName',
     },
     {
-      title: '方向',
-      dataIndex: 'balanceDirection',
-      key: 'balanceDirection',
-      width: 80,
-      render: (direction: string) => (
-        <Tag color={direction === 'DEBIT' ? 'blue' : 'red'}>
-          {direction === 'DEBIT' ? '借' : '贷'}
-        </Tag>
-      ),
-    },
-    {
       title: '期初余额',
       key: 'initialBalance',
       width: 150,
@@ -141,19 +130,18 @@ const SubjectBalance: React.FC = () => {
                 <Table.Summary.Cell index={0} colSpan={2}>
                   <Text strong>合计</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={2} />
-                <Table.Summary.Cell index={3}>
+                <Table.Summary.Cell index={2}>
                   <Text strong>
                     {(summaryData.initialDebit - summaryData.initialCredit).toFixed(2)}
                   </Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={4}>
+                <Table.Summary.Cell index={3}>
                   <Text strong>{summaryData.currentDebit.toFixed(2)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={5}>
+                <Table.Summary.Cell index={4}>
                   <Text strong>{summaryData.currentCredit.toFixed(2)}</Text>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={6}>
+                <Table.Summary.Cell index={5}>
                   <Text strong>
                     {(summaryData.endingDebit - summaryData.endingCredit).toFixed(2)}
                   </Text>

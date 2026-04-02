@@ -160,6 +160,8 @@ export interface SalesOrderItemDto {
   materialId: string;
   quantity: number;
   unitPrice: number;
+  taxRate?: number;
+  taxAmount?: number;
 }
 
 export interface SalesOrderItemResponse {
@@ -170,6 +172,8 @@ export interface SalesOrderItemResponse {
   quantity: number;
   unitPrice: number;
   amount: number;
+  taxRate: number;
+  taxAmount: number;
   deliveredQuantity: number;
 }
 
@@ -388,6 +392,8 @@ export interface PurchaseOrderItemDto {
   materialId: string;
   quantity: number;
   unitPrice: number;
+  taxRate?: number;
+  taxAmount?: number;
 }
 
 export interface PurchaseOrderItemResponse {
@@ -398,6 +404,8 @@ export interface PurchaseOrderItemResponse {
   quantity: number;
   unitPrice: number;
   amount: number;
+  taxRate: number;
+  taxAmount: number;
   receivedQuantity: number;
 }
 

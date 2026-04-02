@@ -56,6 +56,7 @@ const moduleDescriptions: Record<string, string> = {
   '/system/cleanup': '清理业务单据数据',
   '/system/backup': '数据库备份与恢复',
   '/system/config': '会计引擎科目配置',
+  '/system/tax-codes': '配置进项税和销项税的税码及税率',
 };
 
 const SiderMenu: React.FC = () => {
@@ -196,6 +197,7 @@ const SiderMenu: React.FC = () => {
     }
     if (user?.role === 'ADMIN' || user?.role === 'KEY_USER') {
       systemChildren.push({ key: '/system/config', label: '会计引擎' });
+      systemChildren.push({ key: '/system/tax-codes', label: '税码配置' });
     }
     if (systemChildren.length > 0) {
       items.push({

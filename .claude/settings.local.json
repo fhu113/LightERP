@@ -12,7 +12,12 @@
       "Bash(pkill:*)",
       "Bash(pwdx 17531:*)",
       "Bash(do:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(ls -la /Users/ttyy/Coding/LightERP_Claude/*.md)",
+      "WebFetch(domain:railway.com)",
+      "WebFetch(domain:github.com)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ]
   }
 }

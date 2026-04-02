@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
 import { config, validateConfig } from './config';
 import { responseFormatter } from './middleware/responseFormatter';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler';
@@ -23,6 +24,10 @@ import inventoryRoutes from './routes/inventory.routes';
 import cleanupRoutes from './routes/cleanup.routes';
 import productionRoutes from './routes/production.routes';
 import initRoutes from './routes/init.routes';
+import quoteRoutes from './routes/quote.routes';
+import uploadRoutes from './routes/upload.routes';
+import backupRoutes from './routes/backup.routes';
+import taxCodeRoutes from './routes/tax-code.routes';
 
 // 验证配置
 validateConfig();
@@ -32,6 +37,7 @@ const app = express();
 
 // 中间件
 app.use(helmet()); // 安全头
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'))); // 静态文件
 app.use(cors({
   origin: config.security.corsOrigin,
   credentials: true,
@@ -104,6 +110,10 @@ app.use(`${config.app.apiPrefix}/cleanup`, cleanupRoutes);
 
 // 初始化路由（临时）
 app.use(`${config.app.apiPrefix}/init`, initRoutes);
+app.use(`${config.app.apiPrefix}/quote`, quoteRoutes);
+app.use(`${config.app.apiPrefix}/upload`, uploadRoutes);
+app.use(`${config.app.apiPrefix}/tax-codes`, taxCodeRoutes);
+app.use(`${config.app.apiPrefix}`, backupRoutes);
 
 // 404处理
 app.use(notFoundHandler);
